@@ -4,7 +4,7 @@ MODULE StrU;
  * (C) 2009 - 2010 by Alexander Iljin
  * ------------------------------------------------------------------------ *)
 
-IMPORT SYSTEM, Win:=Windows, Str;
+IMPORT SYSTEM, Win:=Windows, Str:=StrA;
 
 (** ------------------------------------------------------------------------
   * Basic Unicode string manipulations.
@@ -15,6 +15,7 @@ CONST
 
 TYPE
    Char* = SYSTEM.CARD16;
+   Ptr* = POINTER TO ARRAY OF Char;
 
 PROCEDURE Pos* (ch: Char; VAR str: ARRAY OF Char): LONGINT;
 VAR

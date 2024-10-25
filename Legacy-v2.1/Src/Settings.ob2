@@ -5,20 +5,20 @@ MODULE Settings;
  * --------------------------------------------------------------------------- *)
 
 IMPORT
-   Npp:=NotepadPP, Str, Win:=Windows;
+   Npp:=NotepadPPU, StrU, Win:=Windows;
 
 CONST
    PluginName* = 'WebEdit';
    IniFileName* = PluginName + '.ini';
 
 VAR
-   configDir-: ARRAY Win.MAX_PATH OF CHAR;
+   configDir-: ARRAY Win.MAX_PATH OF StrU.Char;
    configDirLen-: INTEGER;
 
-PROCEDURE GetIniFileName* (VAR res: ARRAY OF CHAR);
+PROCEDURE GetIniFileName* (VAR res: ARRAY OF StrU.Char);
 BEGIN
-   COPY (configDir, res);
-   Str.AppendC (res, IniFileName);
+   StrU.Copy (configDir, res);
+   StrU.AppendC (res, IniFileName);
 END GetIniFileName;
 
 PROCEDURE Init*;
@@ -26,11 +26,11 @@ PROCEDURE Init*;
 BEGIN
    ASSERT (Npp.handle # NIL, 20);
    Npp.GetPluginConfigDir (configDir);
-   Str.AppendC (configDir, '\');
-   configDirLen := SHORT (Str.Length (configDir));
+   StrU.AppendC (configDir, '\');
+   configDirLen := SHORT (StrU.Length (configDir));
 END Init;
 
 BEGIN
-   configDir := '';
+   configDir[0] := 0;
    configDirLen := 0;
 END Settings.

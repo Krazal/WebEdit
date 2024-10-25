@@ -1,4 +1,4 @@
-MODULE Str;
+MODULE StrA;
 
 (* ------------------------------------------------------------------------
  * (C) 2009 - 2010 by Alexander Iljin
@@ -160,4 +160,4 @@ END Init;
 
 BEGIN
    Init;
-END Str.
+END StrA.

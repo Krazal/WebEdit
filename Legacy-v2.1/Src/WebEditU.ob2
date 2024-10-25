@@ -9,7 +9,7 @@ MODULE WebEditU;
  * --------------------------------------------------------------------------- *)
 
 IMPORT
-   SYSTEM,Win:=Windows,Sci:=Scintilla,Npp:=NotepadPPU,oberonRTS,Str,StrU,Tags,
+   SYSTEM,Win:=Windows,Sci:=Scintilla,Npp:=NotepadPPU,oberonRTS,Str:=StrA,StrU,Tags,
    Ver:=WebEditUVer;
 
 (* ---------------------------------------------------------------------------
@@ -282,6 +282,7 @@ VAR
    (* Read ch from hFile, set eof = TRUE on error. *)
    VAR read: Win.DWORD;
    BEGIN
+      read := 0;
       IF buffPos >= buffLen THEN;
          buffPos := 0;
          eof := ~Win.ReadFile (hFile, SYSTEM.VAL (Win.PVOID, SYSTEM.ADR (buff)), LEN (buff), read, NIL)
@@ -494,7 +495,7 @@ BEGIN
 END ReadConfig;
 
 PROCEDURE GetCharPos (VAR str: ARRAY OF Npp.Char; ch: Npp.Char): INTEGER;
-(* Return index of the first occurence of the ch character in str, -1 if none found. *)
+(* Return index of the first occurrence of the ch character in str, -1 if none found. *)
 VAR res: INTEGER;
 BEGIN
    res := 0;

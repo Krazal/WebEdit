@@ -5,7 +5,7 @@ MODULE Tags;
  * --------------------------------------------------------------------------- *)
 
 IMPORT
-   Ini:=IniFiles, Sci:=Scintilla, Settings, Str, Win:=Windows;
+   Ini:=IniFiles, Sci:=Scintilla, Settings, Str:=StrA, StrU, Win:=Windows;
 
 (* ---------------------------------------------------------------------------
  * This module deals with tag replacements. It was made as a substitute for
@@ -77,7 +77,7 @@ VAR
    msg: ARRAY LEN (KeyNotFoundMsg) + MaxKeyLen OF CHAR; (* Error message *)
    posLeft, posRight, line: LONGINT;
    indentBeg, indentEnd: LONGINT;
-   fname, section: Str.Ptr;
+   fname: StrU.Ptr; section: Str.Ptr;
 
    PROCEDURE ShowMsg (msg: ARRAY OF CHAR);
    BEGIN
@@ -177,7 +177,7 @@ VAR
          INC (to, Sci.GetTextLength (sci) - prevLen);
       END PasteByCommand;
 
-      PROCEDURE ReadFileNameAndSection (VAR str: ARRAY OF CHAR; VAR index: LONGINT; VAR outFileName, outSection: Str.Ptr): BOOLEAN;
+      PROCEDURE ReadFileNameAndSection (VAR str: ARRAY OF CHAR; VAR index: LONGINT; VAR outFileName: StrU.Ptr; outSection: Str.Ptr): BOOLEAN;
       (* Read "[" <outFileName> [":" <outSection>] "]" from str [index]...
        * Return TRUE on success. Both out-variables can be NIL on success. *)
       CONST
@@ -199,7 +199,7 @@ VAR
             END;
             IF (str [index] # Str.Null) & (index > i) THEN
                NEW (outFileName, index - i + 1);
-               Str.CopyTo (str, outFileName^, i, index, 0);
+               StrU.CopyTo (str, outFileName^, i, index, 0);
             END;
             IF str [index] = Separator THEN
                INC (index);
@@ -220,7 +220,7 @@ VAR
          RETURN res
       END ReadFileNameAndSection;
 
-      PROCEDURE PasteFileContents (VAR fname, section: Str.Ptr);
+      PROCEDURE PasteFileContents (VAR fname: StrU.Ptr; section: Str.Ptr);
       (* Try to read 'fname' file. If 'section' # NIL, then treat the file as
        * an ini-file and paste the contents of the 'section' section to the
        * Scintilla text, otherwise paste the entire file. *)

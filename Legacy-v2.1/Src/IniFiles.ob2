@@ -5,7 +5,7 @@ MODULE IniFiles;
  * --------------------------------------------------------------------------- *)
 
 IMPORT
-   SYSTEM, Str, Win:=Windows;
+   SYSTEM, Str:=StrA, StrU, Win:=Windows;
 
 (* This module provides line-based read-only buffered access to files. Special
  * support of ini-files: section headers are detected, lines starting with
@@ -32,10 +32,10 @@ BEGIN
    f.section := FALSE;
 END Init;
 
-PROCEDURE Open* (VAR f: File; VAR fname: ARRAY OF CHAR);
+PROCEDURE Open* (VAR f: File; VAR fname: ARRAY OF StrU.Char);
 BEGIN
    Init (f);
-   f.hFile := Win.CreateFile (fname, Win.FILE_READ_DATA, Win.FILE_SHARE_READ,
+   f.hFile := Win.CreateFileW (fname, Win.FILE_READ_DATA, Win.FILE_SHARE_READ,
       NIL, Win.OPEN_EXISTING, Win.FILE_ATTRIBUTE_NORMAL, NIL)
 END Open;
 
