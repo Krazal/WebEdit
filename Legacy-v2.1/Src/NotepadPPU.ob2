@@ -25,6 +25,8 @@ CONST
    NPPM_GETCURRENTSCINTILLA = NPPMSG + 4;
    NPPM_ADDTOOLBARICON      = NPPMSG + 41;
    NPPM_GETPLUGINCONFIGDIR  = NPPMSG + 46;
+   (* Added in v7.6: https://github.com/notepad-plus-plus/notepad-plus-plus/commit/a87e89e *)
+   NPPM_GETPLUGINHOMEPATH   = NPPMSG + 97;
 
    SCINTILLA_USER           = Win.WM_USER + 2000;
    NPPM_DOOPEN              = SCINTILLA_USER + 8;
@@ -73,7 +75,7 @@ VAR
    handle-: Handle;
    scintillaMain-: Sci.Handle;
    scintillaSecond-: Sci.Handle;
-   PluginName*: ARRAY 64 OF Char;
+   PluginName*: ARRAY MenuItemNameLength OF Char;
    MI: POINTER TO ARRAY OF MenuItem;
    menuItemInfo: POINTER TO ARRAY OF RECORD
       tbi: ToolbarIcons;
@@ -116,6 +118,12 @@ BEGIN
    dir [0] := 0;
    Win.SendMessage (handle, NPPM_GETPLUGINCONFIGDIR, LEN (dir), SYSTEM.ADR (dir))
 END GetPluginConfigDir;
+
+PROCEDURE GetPluginsHomeDir* (VAR dir: ARRAY OF Char);
+BEGIN
+   dir [0] := 0;
+   Win.SendMessage (handle, NPPM_GETPLUGINHOMEPATH, LEN (dir), SYSTEM.ADR (dir))
+END GetPluginsHomeDir;
 
 PROCEDURE GetFullCurrentPath* (VAR res: ARRAY OF Char);
 BEGIN Win.SendMessage (handle, NPPM_GETFULLCURRENTPATH, 0, SYSTEM.ADR (res))

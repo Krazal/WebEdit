@@ -85,11 +85,18 @@ END ClearPairs;
 
 PROCEDURE LoadBitmap (VAR fname: ARRAY OF Npp.Char): Win.HBITMAP;
 (* Load a bitmap image from the given file name and return the handle. *)
+VAR
+  hHDC: Win.HDC;
+  bmpX, bmpY: LONGINT;
 BEGIN
+   hHDC := Win.GetDC(NIL);
+   bmpX := Win.MulDiv(16, Win.GetDeviceCaps(hHDC, Win.LOGPIXELSX), 96);
+   bmpY := Win.MulDiv(16, Win.GetDeviceCaps(hHDC, Win.LOGPIXELSY), 96);
+   Win.ReleaseDC(NIL, hHDC);
    RETURN SYSTEM.VAL (Win.HBITMAP,
       Win.LoadImageW (
-         NIL, SYSTEM.VAL (Win.PWSTR, SYSTEM.ADR (fname)), Win.IMAGE_BITMAP, 0, 0,
-         Win.LR_DEFAULTSIZE + Win.LR_LOADMAP3DCOLORS + Win.LR_LOADFROMFILE
+         NIL, SYSTEM.VAL (Win.PWSTR, SYSTEM.ADR (fname)), Win.IMAGE_BITMAP, bmpX, bmpY,
+         Win.LR_LOADMAP3DCOLORS + Win.LR_LOADFROMFILE
       )
    )
 END LoadBitmap;
@@ -272,7 +279,7 @@ CONST commentChar = ';';
 VAR
    buff: ARRAY 1024 OF CHAR;
    line: ARRAY 2049 OF CHAR;
-   configDir, fname: ARRAY Win.MAX_PATH OF Npp.Char;
+   modulePath, configDir, defaultConfig, fname: ARRAY Win.MAX_PATH OF Npp.Char;
    buffPos, buffLen, configDirLen, maxFnameLen: INTEGER;
    hFile: Win.HANDLE;
    ch: CHAR;
@@ -393,6 +400,7 @@ VAR
 
    PROCEDURE LineToToolbar ();
    VAR i, num, len: INTEGER;
+       hBmp: Win.HBITMAP;
    BEGIN
       i := 0;
       len := SHORT (Str.Length (line));
@@ -413,7 +421,15 @@ VAR
             IF (i < len) & (len - i <= maxFnameLen) THEN
                StrU.Copy (configDir, fname);
                StrU.CopyTo (line, fname, i, len, configDirLen);
-               Npp.MenuItemToToolbar (num, LoadBitmap (fname), NIL)
+               hBmp := LoadBitmap (fname);
+               IF hBmp = NIL THEN
+                  StrU.Copy (modulePath, fname);
+                  StrU.CopyTo (line, fname, i, len, StrU.Length (modulePath));
+                  hBmp := LoadBitmap (fname)
+               END;
+               IF hBmp # NIL THEN
+                  Npp.MenuItemToToolbar (num, hBmp, NIL)
+               END;
             END
          END
       END
@@ -452,12 +468,18 @@ BEGIN
    buffPos := 0;
    buffLen := 0;
    numRead := 0;
+   Npp.GetPluginsHomeDir (modulePath);
    Npp.GetPluginConfigDir (configDir);
-   StrU.AppendC (configDir, '\');
+   StrU.AppendC (configDir, '\' + PluginName + '\');
+   StrU.AppendC (modulePath, '\' + PluginName + '\Config\');
    configDirLen := SHORT (StrU.Length (configDir));
    maxFnameLen := LEN (configDir) - configDirLen - 1;
    StrU.Copy (configDir, fname);
+   StrU.Copy (modulePath, defaultConfig);
    StrU.AppendC (fname, IniFileName);
+   StrU.AppendC (defaultConfig, IniFileName);
+   Win.CreateDirectoryW(configDir, NIL);
+   Win.CopyFileW (defaultConfig, fname, Win.TRUE);
    hFile := Win.CreateFileW (fname, Win.FILE_READ_DATA, Win.FILE_SHARE_READ,
       NIL, Win.OPEN_EXISTING, Win.FILE_ATTRIBUTE_NORMAL, NIL);
    IF (hFile # Win.INVALID_HANDLE_VALUE) THEN
@@ -555,7 +577,7 @@ PROCEDURE ['C'] EditConfig ();
 VAR fname: ARRAY Win.MAX_PATH OF Npp.Char;
 BEGIN
    Npp.GetPluginConfigDir (fname);
-   StrU.AppendC (fname, '\');
+   StrU.AppendC (fname, '\' + PluginName + '\');
    StrU.AppendC (fname, IniFileName);
    IF ~Npp.OpenFile (fname) THEN
       -- just ignore the result
