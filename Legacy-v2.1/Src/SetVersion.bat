@@ -1,4 +1,25 @@
 @echo off
+where sed 2>NUL:
+if %errorlevel% NEQ 0 ( goto :EOF )
+setlocal
+set MAJ=2
+set MIN=1
+set REV=0
+set BUILD=0
+IF "%1" NEQ "" ( set "MAJ=%1" ) else ( goto :EOF )
+IF "%2" NEQ "" ( set "MIN=%2" ) else ( goto :EOF )
+IF "%3" NEQ "" ( set "REV=%3" ) else ( goto :EOF )
+IF "%4" NEQ "" ( set "BUILD=%4" )
+FOR /F "tokens=* USEBACKQ" %%F IN (`git ls-files -- "Src/*Ver.rc" "Src/*Ver.ob2"`) DO (
+  sed -i -e "s/\([^0-9]*\)\(\([0-9]\([.,]\)\)\{1,4\}[0-9]\)\(.*\)/\1%MAJ%\4%MIN%\4%REV%\4%BUILD%\5/g" %%F
+  unix2dos %%F
+)
+endlocal
+:EOF
+exit /B %errorlevel%
+
+@rem ===== old script begins here =====
+
 if "%1" == "" (
   echo Usage: %~nx0 Ver1 Ver2 [Ver3]
   echo Example: %~nx0 2 0

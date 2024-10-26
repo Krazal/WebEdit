@@ -1,0 +1,35 @@
+
+#define WEBEDIT_VERSION_STRING "2.1.0.0\000"
+#define WEBEDIT_VERSION_WORDS 2,1,0,0
+
+1 VERSIONINFO
+FILEVERSION WEBEDIT_VERSION_WORDS
+PRODUCTVERSION WEBEDIT_VERSION_WORDS
+FILEFLAGS 0x0L
+FILEOS 0x40004L
+FILETYPE 0x2L
+FILESUBTYPE 0x0L
+BEGIN
+BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904b0"
+    BEGIN
+      VALUE "CompanyName", "Amadeus IT Solutions\000"
+      VALUE "LegalCopyright", "© 2008 - 2010 by Alexander Iljin\000"
+      VALUE "FileDescription", "WebEdit plugin for Notepad++ (Unicode).\000"
+      VALUE "FileVersion", WEBEDIT_VERSION_STRING
+      VALUE "ProductVersion", WEBEDIT_VERSION_STRING
+      VALUE "ProductName", "WebEdit\000"
+      VALUE "InternalName", "WebEdit\000"
+      VALUE "OriginalFilename", "WebEditU.dll\000"
+      VALUE "Programming language", "Oberon-2\000"
+      VALUE "Tools", "XDS, Notepad++, GNU Make, GoRC\000"
+      VALUE "Comments", "This plugin is freeware and open-source. You may contact me via e-mail: AlexIljin@users.SourceForge.net.\000"
+    END
+  END
+
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x0409, 0x04B0
+  END
+END

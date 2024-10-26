@@ -1,7 +1,7 @@
 % XDS project file
 % Code generation and debugging info
--DEBUG:-
-!if DEBUG then
+!if defined DEBUG then
+   !new mode = "debug"
    -GENDEBUG+
    -GENHISTORY+
    -LINENO+
@@ -12,6 +12,7 @@
    -PROCINLINE-
    -DBGNESTEDPROC+
 !else
+   !new mode = "optimized"
    -GENDEBUG-
    -GENHISTORY-
    -LINENO-
@@ -46,8 +47,16 @@
 -ALIGNMENT = 1
 -ENUMSIZE = 2
 -SETSIZE = 4
+!if __GEN_C__ then
+   -GENCPP+
+   -GENCTYPES+
+   -GENDATE-
+   -ALIGNMENT = 8
+   -ENUMSIZE = 4
+!end
 
 % Other
+-GUI+
 -MINCPU = PENTIUM
 -CPU = PENTIUM
 -NOPTRALIAS+
@@ -85,6 +94,7 @@
 -IMPLIB-
 !module $(project).ob2
 !module $(project)Ver.res
+!message "Compiling " + DLLNAME + " in " + mode + " mode..."
 
 % Notes on NoRuntimeLibs option
 % Use it when you don't need the runtime library support for your application/library

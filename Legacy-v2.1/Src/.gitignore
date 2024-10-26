@@ -1,5 +1,6 @@
 WebEdit/*
-*Ver.ob2
+#*Ver.ob2
+tmp*
 *.md5
 *.res
 *.sym
