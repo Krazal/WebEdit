@@ -1,4 +1,4 @@
-﻿using Kbg.NppPluginNET.PluginInfrastructure;
+﻿using Npp.DotNet.Plugin;
 using System;
 using System.Drawing;
 using System.IO;
@@ -6,13 +6,13 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Windows.Forms;
 using WebEdit;
 using WebEdit.IniFiles;
 using WebEdit.Properties;
+using static Npp.DotNet.Plugin.Win32;
 
-namespace Kbg.NppPluginNET {
-  class Main {
+namespace WebEdit {
+  partial class Main : DotNetPlugin {
     internal const string PluginName = "WebEdit";
     private const string IniFileName = PluginName + ".ini";
     private const string Version = "2.1";
@@ -29,7 +29,7 @@ namespace Kbg.NppPluginNET {
 
     static string iniDirectory, iniFilePath = null;
 
-    public static void OnNotification(ScNotification _)
+    public override void OnBeNotified(ScNotification notification)
     {
     }
 
@@ -38,7 +38,7 @@ namespace Kbg.NppPluginNET {
     /// initialized later and will use the commands used in the menu added here
     /// to get the command identifiers for the toolbar buttons.
     /// </summary>
-    internal static void CommandMenuInit()
+    public override void OnSetInfo()
     {
       int i = 0;
       var npp = new NotepadPPGateway();
@@ -50,23 +50,22 @@ namespace Kbg.NppPluginNET {
       var ini = new IniFile(iniFilePath);
       var actions = new Actions(ini);
       foreach (string key in actions.iniKeys) {
-        var methodInfo = typeof(Actions).GetMethod("ExecuteCommand" + i);
+        var methodInfo = typeof(Actions).GetMethod("ExecuteCommand" + i++);
         if (methodInfo == null)
           break;
 
-        PluginBase.SetCommand(
-          i++,
+        Utils.SetCommand(
           key,
-          (NppFuncItemDelegate) Delegate.CreateDelegate(
-            typeof(NppFuncItemDelegate), actions, methodInfo.Name));
+          (PluginFunc) Delegate.CreateDelegate(
+            typeof(PluginFunc), actions, methodInfo.Name));
       }
-      PluginBase.SetCommand(
-        i++, "Replace Tag", ReplaceTag,
-        new ShortcutKey(false, true, false, Keys.Enter));
-      PluginBase.SetCommand(0, "", null);
-      PluginBase.SetCommand(i++, "Edit Config", EditConfig);
-      PluginBase.SetCommand(i++, "Load Config", LoadConfig);
-      PluginBase.SetCommand(i++, "About...", About);
+      Utils.SetCommand(
+        "Replace Tag", ReplaceTag,
+        new ShortcutKey(FALSE, TRUE, FALSE, 13));
+      Utils.MakeSeparator();
+      Utils.SetCommand("Edit Config", EditConfig);
+      Utils.SetCommand("Load Config", LoadConfig);
+      Utils.SetCommand("About...", About);
     }
 
     /// <summary>
@@ -75,9 +74,11 @@ namespace Kbg.NppPluginNET {
     internal static void EditConfig()
     {
       if (!new NotepadPPGateway().OpenFile(iniFilePath))
-        _ = MessageBox.Show(
+        _ = MsgBoxDialog(
+          PluginData.NppData.NppHandle,
           "Failed to open the configuration file for editing:\n" + iniFilePath,
-          MsgBoxCaption);
+          MsgBoxCaption,
+          (uint)(MsgBox.ICONWARNING | MsgBox.OK));
     }
 
     /// <summary>
@@ -100,7 +101,11 @@ namespace Kbg.NppPluginNET {
     /// Show the About message with copyright and version information.
     /// </summary>
     internal static void About()
-      => _ = MessageBox.Show(AboutMsg, MsgBoxCaption);
+      => _ = MsgBoxDialog(
+            PluginData.NppData.NppHandle,
+            AboutMsg,
+            MsgBoxCaption,
+            (uint)(MsgBox.ICONINFORMATION | MsgBox.OK));
 
     /// <summary>
     /// Add the toolbar icons for the menu items that have the configured
@@ -135,7 +140,7 @@ namespace Kbg.NppPluginNET {
     /// </summary>
     internal static void ReplaceTag()
     {
-      IntPtr currentScint = PluginBase.GetCurrentScintilla();
+      IntPtr currentScint = Utils.GetCurrentScintilla();
       ScintillaGateway scintillaGateway = new ScintillaGateway(currentScint);
       int position = scintillaGateway.GetSelectionEnd();
 
@@ -195,6 +200,5 @@ namespace Kbg.NppPluginNET {
       value = value.Replace("\\i", "  ");
       return value;
     }
-
   }
 }

@@ -1,0 +1,6 @@
+{
+	"omnisharp.useModernNet": true,
+	"dotnet.server.useOmnisharp": false,
+	"dotnet.preferCSharpExtension": true,
+	"dotnetAcquisitionExtension.enableTelemetry": false
+}

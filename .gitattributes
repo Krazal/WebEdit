@@ -1,0 +1,43 @@
+* text=auto
+*[xX][mM][lL]                   text eol=crlf
+*.[iI][nN][iI]                  text eol=crlf
+*.[cC][sS]                      text eol=crlf
+*.[sS][lL][nN]                  text eol=crlf
+*.[rR][eE][sS][xX]              text eol=crlf
+*.[pP][rR][oO][pP][sS]          text eol=crlf
+*.[cC][sS][pP][rR][oO][jJ]      text eol=crlf
+*.[tT][aA][rR][gG][eE][tT][sS]  text eol=crlf
+
+# Force batch scripts to always use CRLF line endings so that if a repo is accessed
+# in Windows via a file share from Linux, the scripts will work.
+*.[bB][aA][tT]  text eol=crlf
+*.[cC][mM][dD]  text eol=crlf
+
+# Force bash scripts to always use LF line endings so that if a repo is accessed
+# in Unix via a file share from Windows, the scripts will work.
+scripts/** text eol=lf
+*.[sS][hH] text eol=lf
+
+# Binary files
+*.[bB][mM][pP]     -diff -text
+*.[gG][iI][fF]     -diff -text
+*.[iI][cC][oO]     -diff -text
+*.[jJ][pP][gG]     -diff -text
+*.[pP][nN][gG]     -diff -text
+*.[pP][sS][dD]     -diff -text
+*.[sS][nN][kK]     -diff -text
+*.[wW][eE][bB][pP] -diff -text
+
+# Archives
+*.7[zZ] 	   -diff -text
+*.[bB][rR] 	   -diff -text
+*.[gG][zZ] 	   -diff -text
+*.[tT][aA][rR] 	   -diff -text
+*.[zZ][iI][pP] 	   -diff -text
+
+# Documents
+*.[pP][dD][fF] 	   -diff -text
+
+# Executables
+*.[dD][lL][lL] 	   -diff -text
+*.[eE][xE][eE] 	   -diff -text

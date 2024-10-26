@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+  <PropertyGroup>
+    <PublishRelease Condition=" '$(PublishRelease)' == '' ">false</PublishRelease>
+    <RuntimeIdentifier Condition=" '$(RuntimeIdentifier)' == '' ">win-x64</RuntimeIdentifier>
+    <TargetFramework Condition=" '$(TargetFramework)' == '' ">net8.0-windows</TargetFramework>
+  </PropertyGroup>
+
+</Project>

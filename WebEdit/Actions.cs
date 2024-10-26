@@ -1,4 +1,4 @@
-﻿using Kbg.NppPluginNET.PluginInfrastructure;
+﻿using Npp.DotNet.Plugin;
 using System;
 using System.Collections.Generic;
 using WebEdit.IniFiles;
@@ -20,7 +20,7 @@ namespace WebEdit {
 
     private void ExecuteCommand(string command)
     {
-      IntPtr currentScint = PluginBase.GetCurrentScintilla();
+      IntPtr currentScint = Utils.GetCurrentScintilla();
       ScintillaGateway scintillaGateway = new ScintillaGateway(currentScint);
       string selectedText = scintillaGateway.GetSelText();
       int positionStar = scintillaGateway.GetSelectionStart();
