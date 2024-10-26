@@ -61,6 +61,7 @@ CONST
       +'Contact e-mail: AlexIljin@users.SourceForge.net';
 
 TYPE
+   ImageType = (imgBmp, imgIco);
    Pair = RECORD
       (* pair name is displayed in the plugin menu *)
       name, left, right: POINTER TO ARRAY OF CHAR
@@ -83,22 +84,31 @@ BEGIN
    END;
 END ClearPairs;
 
-PROCEDURE LoadBitmap (VAR fname: ARRAY OF Npp.Char): Win.HBITMAP;
+PROCEDURE LoadBitmap (img: ImageType; fname: ARRAY OF Npp.Char; VAR hImg: Win.HANDLE);
 (* Load a bitmap image from the given file name and return the handle. *)
 VAR
   hHDC: Win.HDC;
   bmpX, bmpY: LONGINT;
+  icoX, icoY: LONGINT;
 BEGIN
    hHDC := Win.GetDC(NIL);
-   bmpX := Win.MulDiv(16, Win.GetDeviceCaps(hHDC, Win.LOGPIXELSX), 96);
-   bmpY := Win.MulDiv(16, Win.GetDeviceCaps(hHDC, Win.LOGPIXELSY), 96);
+   CASE img OF
+   | imgBmp:
+       bmpX := Win.MulDiv(16, Win.GetDeviceCaps(hHDC, Win.LOGPIXELSX), 96);
+       bmpY := Win.MulDiv(16, Win.GetDeviceCaps(hHDC, Win.LOGPIXELSY), 96);
+       hImg := Win.LoadImageW (
+             NIL, SYSTEM.VAL (Win.PWSTR, SYSTEM.ADR (fname)), Win.IMAGE_BITMAP, bmpX, bmpY,
+             Win.LR_LOADMAP3DCOLORS + Win.LR_LOADFROMFILE
+          )
+   | imgIco:
+       icoX := Win.MulDiv(32, Win.GetDeviceCaps(hHDC, Win.LOGPIXELSX), 96);
+       icoY := Win.MulDiv(32, Win.GetDeviceCaps(hHDC, Win.LOGPIXELSY), 96);
+       hImg := Win.LoadImageW (
+             NIL, SYSTEM.VAL (Win.PWSTR, SYSTEM.ADR (fname)), Win.IMAGE_ICON, icoX, icoY,
+             Win.LR_LOADTRANSPARENT + Win.LR_LOADFROMFILE
+          )
+   END;
    Win.ReleaseDC(NIL, hHDC);
-   RETURN SYSTEM.VAL (Win.HBITMAP,
-      Win.LoadImageW (
-         NIL, SYSTEM.VAL (Win.PWSTR, SYSTEM.ADR (fname)), Win.IMAGE_BITMAP, bmpX, bmpY,
-         Win.LR_LOADMAP3DCOLORS + Win.LR_LOADFROMFILE
-      )
-   )
 END LoadBitmap;
 
 PROCEDURE SurroundSelection (sc: Sci.Handle; VAR leftText, rightText: ARRAY OF CHAR);
@@ -398,9 +408,32 @@ VAR
       RETURN TRUE
    END LineToPair;
 
+   PROCEDURE ResourceToHandle (img: ImageType; resource: ARRAY OF CHAR; VAR imgPath: ARRAY OF Npp.Char): Win.HANDLE;
+   VAR handle: Win.HANDLE;
+    (* msg: ARRAY 32 OF Npp.Char; *)
+   BEGIN
+     StrU.Copy (configDir, imgPath);
+     StrU.Append(imgPath, resource);
+     LoadBitmap (img, imgPath, handle);
+     IF handle = NIL THEN
+        (* msg[0] := 0; *)
+        (* StrU.AppendC(msg, 'Plugins?'); *)
+        (* Win.MessageBoxW(NIL, imgPath, msg, Win.MB_OK); *)
+        StrU.Copy (modulePath, imgPath);
+        StrU.Append(imgPath, resource);
+        LoadBitmap (img, imgPath, handle);
+     END;
+     RETURN handle;
+   END ResourceToHandle;
+
    PROCEDURE LineToToolbar ();
-   VAR i, num, len: INTEGER;
+   VAR i, num, len, iconStartPos: INTEGER;
        hBmp: Win.HBITMAP;
+       hIco, hDmIco: Win.HICON;
+       delims: ARRAY 2 OF INTEGER;
+       resource: ARRAY Win.MAX_PATH OF CHAR;
+       icoPath, dmIcoPath: ARRAY Win.MAX_PATH OF Npp.Char;
+       hasIcos: BOOLEAN;
    BEGIN
       i := 0;
       len := SHORT (Str.Length (line));
@@ -419,16 +452,37 @@ VAR
             DEC (num); (* items are numbered from 1, in ini-file *)
             INC (i); (* skip '=' *)
             IF (i < len) & (len - i <= maxFnameLen) THEN
-               StrU.Copy (configDir, fname);
-               StrU.CopyTo (line, fname, i, len, configDirLen);
-               hBmp := LoadBitmap (fname);
-               IF hBmp = NIL THEN
-                  StrU.Copy (modulePath, fname);
-                  StrU.CopyTo (line, fname, i, len, StrU.Length (modulePath));
-                  hBmp := LoadBitmap (fname)
+               delims[0] := i; (* look ahead for ICO file names *)
+               WHILE (delims[0] < len) & (line[delims[0]] # commentChar) DO INC (delims[0]) END;
+               hasIcos := (delims[0] < len); (* first ICO found *)
+               IF hasIcos THEN
+                  iconStartPos := delims[0]
+               ELSE
+                  iconStartPos := len
+               END;
+               Str.CopyTo (line, resource, i, iconStartPos, 0);
+               hBmp := SYSTEM.VAL (Win.HBITMAP, ResourceToHandle (imgBmp, resource, fname));
+               hIco := NIL;
+               hDmIco := NIL;
+               IF hasIcos THEN (* parse names of ICO files *)
+                  INC (delims[0]); (* skip ';' *)
+                  delims[1] := delims[0]; (* look ahead for second ICO file name *)
+                  WHILE (delims[1] < len) & (line[delims[1]] # commentChar) DO INC (delims[1]) END;
+                  IF delims[1] < len THEN (* second ICO found *)
+                     resource[0] := Str.Null;
+                     Str.CopyTo (line, resource, delims[0], delims[1], 0); (* load first ICO... *)
+                     hIco := SYSTEM.VAL (Win.HICON, ResourceToHandle (imgIco, resource, icoPath));
+                     INC (delims[1]); (* skip ';' *);
+                     resource[0] := Str.Null;
+                     Str.CopyTo (line, resource, delims[1], len, 0); (* ...load second ICO *)
+                     hDmIco := SYSTEM.VAL (Win.HICON, ResourceToHandle (imgIco, resource, dmIcoPath));
+                  ELSE
+                     Str.CopyTo (line, resource, delims[0], len, 0); (* load the one and only ICO *)
+                     hIco := SYSTEM.VAL (Win.HICON, ResourceToHandle (imgIco, resource, icoPath));
+                  END;
                END;
                IF hBmp # NIL THEN
-                  Npp.MenuItemToToolbar (num, hBmp, NIL)
+                  Npp.MenuItemToToolbar (num, hBmp, hIco, hDmIco)
                END;
             END
          END

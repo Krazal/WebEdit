@@ -25,8 +25,11 @@ CONST
    NPPM_GETCURRENTSCINTILLA = NPPMSG + 4;
    NPPM_ADDTOOLBARICON      = NPPMSG + 41;
    NPPM_GETPLUGINCONFIGDIR  = NPPMSG + 46;
+   NPPM_GETNPPVERSION       = NPPMSG + 50;
    (* Added in v7.6: https://github.com/notepad-plus-plus/notepad-plus-plus/commit/a87e89e *)
    NPPM_GETPLUGINHOMEPATH   = NPPMSG + 97;
+   (* Added in v8.0: https://community.notepad-plus-plus.org/post/68808 *)
+   NPPM_ADDTOOLBARICON_FORDARKMODE = NPPMSG + 101;
 
    SCINTILLA_USER           = Win.WM_USER + 2000;
    NPPM_DOOPEN              = SCINTILLA_USER + 8;
@@ -65,6 +68,13 @@ TYPE
       (* other fields are not used in this plugin *)
    END;
 
+   (* Used with NPPM_ADDTOOLBARICON_FORDARKMODE *)
+   ToolbarIconsDarkMode = RECORD
+      bmp: Win.HBITMAP;
+      ico: Win.HICON;
+      icodm: Win.HICON;
+   END;
+
    (* Used with NPPM_ADDTOOLBARICON *)
    ToolbarIcons = RECORD
       bmp: Win.HBITMAP;
@@ -79,6 +89,7 @@ VAR
    MI: POINTER TO ARRAY OF MenuItem;
    menuItemInfo: POINTER TO ARRAY OF RECORD
       tbi: ToolbarIcons;
+      tbdm: ToolbarIconsDarkMode;
       enabled: BOOLEAN;
    END;
    lastItem: INTEGER;
@@ -265,12 +276,18 @@ BEGIN
    END
 END MenuItemChecked;
 
-PROCEDURE MenuItemToToolbar* (index: INTEGER; bmp: Win.HBITMAP; ico: Win.HICON);
+PROCEDURE MenuItemToToolbar* (index: INTEGER; bmp: Win.HBITMAP; ico: Win.HICON; icodm: Win.HICON);
 (** Show the index'th menu item on toolbar using either a bitmap or an icon.
   * You can put an item on the toolbar at any time, but you can't remove it. *)
 BEGIN
    ASSERT (~toolbarLocked, 20);
    ASSERT ((0 <= index) & (index < LEN (menuItemInfo^)), 21);
+   IF icodm = NIL THEN
+     icodm := ico
+   END;
+   menuItemInfo [index].tbdm.bmp := bmp;
+   menuItemInfo [index].tbdm.ico := ico;
+   menuItemInfo [index].tbdm.icodm := icodm;
    menuItemInfo [index].tbi.bmp := bmp;
    menuItemInfo [index].tbi.ico := ico
 END MenuItemToToolbar;
@@ -325,12 +342,19 @@ END InitMenu;
 
 PROCEDURE InitToolbar ();
 VAR i: INTEGER;
+    versionWords: LONGINT;
 BEGIN
    ASSERT (toolbarLocked, 20);
    i := 0;
    WHILE i < lastItem DO
       IF (menuItemInfo [i].tbi.bmp # NIL) OR (menuItemInfo [i].tbi.ico # NIL) THEN
-         Win.SendMessage (handle, NPPM_ADDTOOLBARICON, MI [i].cmdID, SYSTEM.ADR (menuItemInfo [i].tbi))
+         versionWords := Win.SendMessage (handle, NPPM_GETNPPVERSION, 0, 0);
+         (* the dark mode API requires a least one ICO, otherwise nothing will display *)
+         IF (Win.HIWORD (versionWords) >= 8) & (menuItemInfo [i].tbi.ico # NIL) THEN
+           Win.SendMessage (handle, NPPM_ADDTOOLBARICON_FORDARKMODE, MI [i].cmdID, SYSTEM.ADR (menuItemInfo [i].tbdm))
+         ELSE
+           Win.SendMessage (handle, NPPM_ADDTOOLBARICON, MI [i].cmdID, SYSTEM.ADR (menuItemInfo [i].tbi))
+         END;
       END;
       INC (i)
    END
