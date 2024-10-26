@@ -8,7 +8,7 @@
 *.exe
 
 # Files generated from *.resx.
-*.Designer.cs
+# *.Designer.cs
 
 # User-specific files
 *.rsuser
