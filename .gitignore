@@ -393,3 +393,6 @@ FodyWeavers.xsd
 # JetBrains Rider
 .idea/
 *.sln.iml
+
+# XDS O2/M2 development system
+xds/

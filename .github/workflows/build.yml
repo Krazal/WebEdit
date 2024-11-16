@@ -1,0 +1,67 @@
+name: Native AOT Build
+on:
+  push:
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+env:
+  PLUGIN_NAME: 'WebEdit'
+
+jobs:
+  xds:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Build ${{ env.PLUGIN_NAME }}.win32
+        run: |
+          if ( $(Get-FileHash -A SHA512 .\xds-260-win32.zip).Hash -ne $(Get-Content .\xds-260-win32.zip.sha512) ) { exit 1 }
+          $env:PATH += ";${pwd}\xds\bin"
+          7z x .\xds-260-win32.zip
+          cmd /c .\Src\compile.bat
+          echo D | xcopy /DIY ${{ github.workspace }}\WebEdit\Resources Config
+          echo "RELEASE_VERSION=$((Get-Item ${{ env.PLUGIN_NAME }}.dll).VersionInfo.FileVersion)" >> $env:GITHUB_ENV
+        working-directory: Legacy-v2.1
+
+      - name: Upload ${{ env.PLUGIN_NAME }}.${{ env.RELEASE_VERSION }}.win32
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: ${{ env.PLUGIN_NAME }}.${{ env.RELEASE_VERSION }}.win32
+          path: |
+            Legacy-v2.1/${{ env.PLUGIN_NAME }}.dll
+            Legacy-v2.1/Config/
+
+  publish_aot:
+    needs: xds
+    strategy:
+      matrix:
+        target_runtime: [ x64, arm64 ]
+    runs-on: windows-latest
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-dotnet@3e891b0cb619bf60e2c25674b222b8940e2c1c25 # v4.1.0
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Build ${{ env.PLUGIN_NAME }}.${{ matrix.target_runtime }}
+        run: |
+          dotnet restore
+          dotnet build -r win-${{ matrix.target_runtime }} -c Release
+          dotnet publish -r win-${{ matrix.target_runtime }} -c Release
+          echo F | xcopy /DVY .\bin\Release\net8.0-windows\win-${{ matrix.target_runtime }}\native\${{ env.PLUGIN_NAME }}.dll ${{ env.PLUGIN_NAME }}.dll
+          echo "RELEASE_VERSION=$((Get-Item ${{ env.PLUGIN_NAME }}.dll).VersionInfo.FileVersion)" >> $env:GITHUB_ENV
+        working-directory: WebEdit
+
+      - name: Upload ${{ env.PLUGIN_NAME }}.${{ env.RELEASE_VERSION }}.${{ matrix.target_runtime }}
+        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        with:
+          name: ${{ env.PLUGIN_NAME }}.${{ env.RELEASE_VERSION }}.${{ matrix.target_runtime }}
+          path: |
+            WebEdit/bin/Release/net8.0-windows/win-${{ matrix.target_runtime }}/native/${{ env.PLUGIN_NAME }}.dll
