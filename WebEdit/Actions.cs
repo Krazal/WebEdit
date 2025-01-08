@@ -1,7 +1,6 @@
 ﻿using Npp.DotNet.Plugin;
 using System;
 using System.Collections.Generic;
-using WebEdit.IniFiles;
 
 namespace WebEdit {
   class Actions {

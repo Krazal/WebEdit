@@ -6,8 +6,6 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
-using WebEdit;
-using WebEdit.IniFiles;
 using WebEdit.Properties;
 using static Npp.DotNet.Plugin.Win32;
 
@@ -163,7 +161,7 @@ namespace WebEdit {
         }
         byte[] buffer = new byte[1048];
         var ini = new IniFile(iniFilePath);
-        string value = ini.Get("Tags", selectedText, 1048);
+        string value = ini.Get("Tags", selectedText);
         if (string.IsNullOrEmpty(value.Trim('\0'))) {
           throw new Exception("No tag here.");
         }
