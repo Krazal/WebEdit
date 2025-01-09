@@ -48,14 +48,13 @@ namespace WebEdit {
       var ini = new IniFile(iniFilePath);
       var actions = new Actions(ini);
       foreach (string key in actions.iniKeys) {
-        var methodInfo = typeof(Actions).GetMethod("ExecuteCommand" + i++);
+        var methodInfo = actions.GetCommand(i++);
         if (methodInfo == null)
           break;
 
         Utils.SetCommand(
           key,
-          (PluginFunc) Delegate.CreateDelegate(
-            typeof(PluginFunc), actions, methodInfo.Name));
+          methodInfo);
       }
       Utils.SetCommand(
         "Replace Tag", ReplaceTag,

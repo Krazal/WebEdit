@@ -27,7 +27,7 @@ jobs:
         working-directory: Legacy-v2.1
 
       - name: Upload ${{ env.PLUGIN_NAME }}.${{ env.RELEASE_VERSION }}.win32
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
         with:
           name: ${{ env.PLUGIN_NAME }}.${{ env.RELEASE_VERSION }}.win32
           path: |
@@ -46,7 +46,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-      - uses: actions/setup-dotnet@3e891b0cb619bf60e2c25674b222b8940e2c1c25 # v4.1.0
+      - uses: actions/setup-dotnet@87b7050bc53ea08284295505d98d2aa94301e852 # v4.2.0
         with:
           dotnet-version: 8.0.x
 
@@ -55,13 +55,15 @@ jobs:
           dotnet restore
           dotnet build -r win-${{ matrix.target_runtime }} -c Release
           dotnet publish -r win-${{ matrix.target_runtime }} -c Release
+          echo D | xcopy /DIY .\Resources Config
           echo F | xcopy /DVY .\bin\Release\net8.0-windows\win-${{ matrix.target_runtime }}\native\${{ env.PLUGIN_NAME }}.dll ${{ env.PLUGIN_NAME }}.dll
           echo "RELEASE_VERSION=$((Get-Item ${{ env.PLUGIN_NAME }}.dll).VersionInfo.FileVersion)" >> $env:GITHUB_ENV
         working-directory: WebEdit
 
       - name: Upload ${{ env.PLUGIN_NAME }}.${{ env.RELEASE_VERSION }}.${{ matrix.target_runtime }}
-        uses: actions/upload-artifact@b4b15b8c7c6ac21ea08fcf65892d2ee8f75cf882 # v4.4.3
+        uses: actions/upload-artifact@6f51ac03b9356f520e9adb1b1b7802705f340c2b # v4.5.0
         with:
           name: ${{ env.PLUGIN_NAME }}.${{ env.RELEASE_VERSION }}.${{ matrix.target_runtime }}
           path: |
-            WebEdit/bin/Release/net8.0-windows/win-${{ matrix.target_runtime }}/native/${{ env.PLUGIN_NAME }}.dll
+            WebEdit/${{ env.PLUGIN_NAME }}.dll
+            WebEdit/Config/
