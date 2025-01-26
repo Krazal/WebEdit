@@ -48,6 +48,17 @@
   </ItemGroup>
 
   <ItemGroup>
+      <Content Include="Resources/*.ico">
+        <Link>Config\%(RecursiveDir)%(Filename)%(Extension)</Link>
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </Content>
+      <Content Include="Resources/*.bmp">
+        <Link>Config\%(RecursiveDir)%(Filename)%(Extension)</Link>
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      </Content>
+  </ItemGroup>
+
+  <ItemGroup>
     <Resource Include="Resources\a.bmp" />
     <Resource Include="Resources\dc.bmp" />
     <Resource Include="Resources\di.bmp" />
