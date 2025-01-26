@@ -29,7 +29,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Npp.DotNet.Plugin" Version="0.0.1-alpha" />
+    <PackageReference Include="Npp.DotNet.Plugin" Version="0.1.0-alpha.1" />
   </ItemGroup>
 
   <ItemGroup>

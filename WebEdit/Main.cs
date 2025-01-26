@@ -8,10 +8,13 @@ using System.Text;
 using System.Text.RegularExpressions;
 using WebEdit.Properties;
 using static Npp.DotNet.Plugin.Win32;
+using static Npp.DotNet.Plugin.Winforms.WinGDI;
+using static Npp.DotNet.Plugin.Winforms.WinUser;
 
 namespace WebEdit {
   partial class Main : DotNetPlugin {
     internal const string PluginName = "WebEdit";
+    private const string MenuCmdPrefix = $"{PluginName} -";
     private const string IniFileName = PluginName + ".ini";
     private const string Version = "2.1";
     private const string MsgBoxCaption = PluginName + " " + Version;
@@ -29,6 +32,20 @@ namespace WebEdit {
 
     public override void OnBeNotified(ScNotification notification)
     {
+      if (notification.Header.HwndFrom == PluginData.NppData.NppHandle)
+      {
+        uint code = notification.Header.Code;
+        switch ((NppMsg)code)
+        {
+          case NppMsg.NPPN_TBMODIFICATION:
+            PluginData.FuncItems.RefreshItems();
+            AddToolbarIcons();
+            break;
+          case NppMsg.NPPN_SHUTDOWN:
+            PluginCleanUp();
+            break;
+        }
+      }
     }
 
     /// <summary>
@@ -53,7 +70,7 @@ namespace WebEdit {
           break;
 
         Utils.SetCommand(
-          key,
+          $"{MenuCmdPrefix} {key}",
           methodInfo);
       }
       Utils.SetCommand(
@@ -108,27 +125,46 @@ namespace WebEdit {
     /// Add the toolbar icons for the menu items that have the configured
     /// bitmap files in the iniDirectory folder.
     /// </summary>
+#pragma warning disable CS0618 // Dark mode unaware icons are deprecated since Npp v8.0
     internal static void AddToolbarIcons()
     {
-      var npp = new NotepadPPGateway();
+      ToolbarIcon _tbIcons = default;
+      ToolbarIconDarkMode tbIcons = default;
+      bool hasDarkMode = NppUtils.NppVersionAtLeast8;
       var ini = new IniFile(iniFilePath);
-      foreach (string key in ini.GetKeys("Toolbar"))
-        try {
-          npp.AddToolbarIcon(
-            Convert.ToInt32(key) - 1,
-            new Bitmap(
-              Path.Combine(
-                iniDirectory,
-                ini.Get("Toolbar", key).Replace("\0", ""))));
-        } catch {
+      var actions = new Actions(ini);
+      var icons = ini.GetKeys("Toolbar");
+      for (int i = 0; i < actions.iniKeys.Length && i < icons.Length; ++i)
+      {
+        try
+        {
+          if (actions.GetCommand(i) == null)
+            continue;
+          MenuItemToToolbar(ini.Get("Toolbar", icons[i]).Replace("\0", ""), ref tbIcons);
+          // The dark mode API requires at least one ICO, or else nothing will display
+          if (hasDarkMode && tbIcons.HToolbarIcon != NULL)
+            NppUtils.Notepad.AddToolbarIcon(i, tbIcons);
+          else
+          {
+            _tbIcons.HToolbarBmp = tbIcons.HToolbarBmp;
+            _tbIcons.HToolbarIcon = tbIcons.HToolbarIcon;
+            NppUtils.Notepad.AddToolbarIcon(i, _tbIcons);
+          }
+        }
+        catch
+        {
           // Ignore any errors like missing or corrupt bitmap files, or
           // incorrect command index values.
         }
+      }
     }
+#pragma warning restore CS0618
 
     internal static void PluginCleanUp()
     {
       // This method is called when the plugin is notified about Npp shutdown.
+      PluginData.PluginNamePtr = NULL;
+      PluginData.FuncItems.Dispose();
     }
 
     /// <summary>
@@ -196,6 +232,67 @@ namespace WebEdit {
       }
       value = value.Replace("\\i", "  ");
       return value;
+    }
+
+    /// <summary>
+    /// Parse a delimited string of 1-3 icon file names, load the icon files
+    /// and assign their handles to the given <paramref name="tbIcons"/> instance.
+    /// </summary>
+    private static void MenuItemToToolbar(string iniValueString, ref ToolbarIconDarkMode tbIcons)
+    {
+      string[] icons = iniValueString.Split(IniFile.ValueStringDelimiter, StringSplitOptions.RemoveEmptyEntries);
+      for (int i = 0; i < icons.Length; ++i)
+      {
+        string iconFileName = icons[i]?.Trim().ToLowerInvariant();
+        string iconExt = Path.GetExtension(iconFileName)?.ToLowerInvariant();
+        if (iconExt == ".bmp")
+          LoadToolbarIcon(LoadImageType.IMAGE_BITMAP, GetIconPath(iconFileName), out tbIcons.HToolbarBmp);
+        else if (iconExt == ".ico")
+        {
+          if (i == 1)
+          {
+            LoadToolbarIcon(LoadImageType.IMAGE_ICON, GetIconPath(iconFileName), out tbIcons.HToolbarIcon);
+            if (icons.Length < 3)
+              tbIcons.HToolbarIconDarkMode = tbIcons.HToolbarIcon;
+          }
+          if (i == 2)
+            LoadToolbarIcon(LoadImageType.IMAGE_ICON, GetIconPath(iconFileName), out tbIcons.HToolbarIconDarkMode);
+        }
+      }
+    }
+
+    /// <summary>
+    /// Load a bitmap or icon from the given file name and return the handle.
+    /// </summary>
+    private static void LoadToolbarIcon(LoadImageType imgType, string iconFile, out IntPtr hImg)
+    {
+      var loadFlags = LoadImageFlag.LR_LOADFROMFILE;
+      switch (imgType)
+      {
+        case LoadImageType.IMAGE_BITMAP:
+          (int bmpX, int bmpY) = GetLogicalPixels(16, 16);
+          hImg = LoadImage(NULL, iconFile, imgType, bmpX, bmpY, loadFlags | LoadImageFlag.LR_LOADMAP3DCOLORS);
+          break;
+        case LoadImageType.IMAGE_ICON:
+          (int icoX, int icoY) = GetLogicalPixels(32, 32);
+          hImg = LoadImage(NULL, iconFile, imgType, icoX, icoY, loadFlags | LoadImageFlag.LR_LOADTRANSPARENT);
+          break;
+        default:
+          hImg = NULL;
+          break;
+      }
+    }
+
+    /// <summary>
+    /// Return the absolute path to an icon file. The user's config directory
+    /// is tried first; then the plugin's installation folder.
+    /// </summary>
+    private static string GetIconPath(string icon)
+    {
+      string path = Path.Combine(NppUtils.Notepad.GetPluginConfigPath(), PluginName, icon);
+      if (!File.Exists(path))
+        path = Path.Combine(NppUtils.Notepad.GetPluginsHomePath(), PluginName, "Config", icon);
+      return path;
     }
   }
 }

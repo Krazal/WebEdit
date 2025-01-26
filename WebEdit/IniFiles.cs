@@ -4,6 +4,8 @@ namespace WebEdit
 {
   class IniFile(string fileName)
   {
+    public static readonly char ValueStringDelimiter = ';';
+
     private readonly char _keyValueSeparator = '=';
     private readonly Regex _iniFileComment = new(@"^[;#]\s?");
 
