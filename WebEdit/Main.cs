@@ -1,9 +1,4 @@
 ﻿using Npp.DotNet.Plugin;
-using System;
-using System.Drawing;
-using System.IO;
-using System.Linq;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using WebEdit.Properties;
@@ -28,6 +23,8 @@ namespace WebEdit {
       + "Ported to C# by Miguel Febres, April 2021.\n"
       + "Contact e-mail: AlexIljin@users.SourceForge.net";
 
+    static IniFile ini = null;
+    static bool isConfigDirty = false;
     static string iniDirectory, iniFilePath = null;
 
     public override void OnBeNotified(ScNotification notification)
@@ -37,6 +34,20 @@ namespace WebEdit {
         uint code = notification.Header.Code;
         switch ((NppMsg)code)
         {
+          case NppMsg.NPPN_READY:
+          case NppMsg.NPPN_BUFFERACTIVATED:
+          case NppMsg.NPPN_NATIVELANGCHANGED:
+            SetMenuItemNames();
+            break;
+          case NppMsg.NPPN_FILESAVED:
+            if (isConfigDirty &&
+                  (string.Compare(iniFilePath, NppUtils.GetCurrentPath(), StringComparison.InvariantCultureIgnoreCase) == 0))
+            {
+              LoadConfig();
+              isConfigDirty = false;
+            }
+            SetMenuItemNames();
+            break;
           case NppMsg.NPPN_TBMODIFICATION:
             PluginData.FuncItems.RefreshItems();
             AddToolbarIcons();
@@ -61,8 +72,6 @@ namespace WebEdit {
       _ = Directory.CreateDirectory(iniDirectory);
       iniFilePath = Path.Combine(iniDirectory, IniFileName);
       LoadConfig();
-      // TODO: move the menu initialization to the LoadConfig method.
-      var ini = new IniFile(iniFilePath);
       var actions = new Actions(ini);
       foreach (string key in actions.iniKeys) {
         var methodInfo = actions.GetCommand(i++);
@@ -71,7 +80,11 @@ namespace WebEdit {
 
         Utils.SetCommand(
           $"{MenuCmdPrefix} {key}",
-          methodInfo);
+          () =>
+          {
+            var cmds = new Actions(ini);
+            cmds.ExecuteCommand(ini.Get("Commands", key));
+          });
       }
       Utils.SetCommand(
         "Replace Tag", ReplaceTag,
@@ -93,6 +106,8 @@ namespace WebEdit {
           "Failed to open the configuration file for editing:\n" + iniFilePath,
           MsgBoxCaption,
           (uint)(MsgBox.ICONWARNING | MsgBox.OK));
+      else
+        isConfigDirty = true;
     }
 
     /// <summary>
@@ -100,15 +115,16 @@ namespace WebEdit {
     /// requested by the user via the Load Config menu. The iniFilePath member
     /// must be initialized prior to calling this method.
     /// </summary>
-    internal static unsafe void LoadConfig()
+    internal static void LoadConfig()
     {
       if (!File.Exists(iniFilePath))
         using (var fs = File.Create(iniFilePath)) {
           byte[] info = new UTF8Encoding(true).GetBytes(Resources.WebEditIni);
           fs.Write(info, 0, info.Length);
         }
-      // TODO: load the ini-file contents and update the menu and tag
+      // Reload the ini-file contents and update the menu and tag
       // replacement data.
+      ini = new IniFile(iniFilePath);
     }
 
     /// <summary>
@@ -131,7 +147,6 @@ namespace WebEdit {
       ToolbarIcon _tbIcons = default;
       ToolbarIconDarkMode tbIcons = default;
       bool hasDarkMode = NppUtils.NppVersionAtLeast8;
-      var ini = new IniFile(iniFilePath);
       var actions = new Actions(ini);
       var icons = ini.GetKeys("Toolbar");
       for (int i = 0; i < actions.iniKeys.Length && i < icons.Length; ++i)
@@ -293,6 +308,31 @@ namespace WebEdit {
       if (!File.Exists(path))
         path = Path.Combine(NppUtils.Notepad.GetPluginsHomePath(), PluginName, "Config", icon);
       return path;
+    }
+
+    /// <summary>
+    /// Set the text of each menu item, i.e., remove the &quot;WebEdit -  &quot; prefix.
+    /// </summary>
+    /// <remarks>
+    /// Adapted from <see href="https://github.com/alex-ilin/WebEdit/blob/7bb4243/Legacy-v2.1/Src/NotepadPPU.ob2#L184"/>
+    /// </remarks>
+    private static unsafe void SetMenuItemNames()
+    {
+      Actions actions = new(ini);
+      IntPtr hMenu = SendMessage(PluginData.NppData.NppHandle, (uint)NppMsg.NPPM_GETMENUHANDLE, (uint)NppMsg.NPPPLUGINMENU);
+      for (int i = 0; i < actions.iniKeys.Length && i < PluginData.FuncItems.Items.Count; ++i)
+      {
+        try
+        {
+          var itemName = actions.iniKeys[i];
+          var itemID = PluginData.FuncItems.Items[i].CmdID;
+          fixed (char* lpNewItem = itemName)
+          {
+            ModifyMenu(hMenu, itemID, MF_BYCOMMAND | MF_STRING, (UIntPtr)itemID, (IntPtr)lpNewItem);
+          }
+        }
+        catch { }
+      }
     }
   }
 }
