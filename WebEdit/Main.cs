@@ -1,6 +1,5 @@
 ﻿using Npp.DotNet.Plugin;
 using System.Text;
-using System.Text.RegularExpressions;
 using WebEdit.Properties;
 using static Npp.DotNet.Plugin.Win32;
 using static Npp.DotNet.Plugin.Winforms.WinGDI;
@@ -8,6 +7,8 @@ using static Npp.DotNet.Plugin.Winforms.WinUser;
 
 namespace WebEdit {
   partial class Main : DotNetPlugin {
+    /// <summary>See <see href="https://github.com/alex-ilin/WebEdit/blob/7bb4243/Legacy-v2.1/Src/Tags.ob2#L16"/></summary>
+    public const int MaxKeyLen = 32;
     internal const string PluginName = "WebEdit";
     private const string MenuCmdPrefix = $"{PluginName} -";
     private const string IniFileName = PluginName + ".ini";
@@ -25,7 +26,7 @@ namespace WebEdit {
 
     static IniFile ini = null;
     static bool isConfigDirty = false;
-    static string iniDirectory, iniFilePath = null;
+    internal static string iniDirectory, iniFilePath = null;
 
     public override void OnBeNotified(ScNotification notification)
     {
@@ -190,63 +191,67 @@ namespace WebEdit {
     {
       IntPtr currentScint = Utils.GetCurrentScintilla();
       ScintillaGateway scintillaGateway = new ScintillaGateway(currentScint);
-      int position = scintillaGateway.GetSelectionEnd();
-
+      long lineCurrent = scintillaGateway.GetCurrentLineNumber();
+      long lineStart = scintillaGateway.PositionFromLine(lineCurrent);
+      long lineStartNext = scintillaGateway.PositionFromLine(lineCurrent + 1);
       string selectedText = scintillaGateway.GetSelText();
+
       if (string.IsNullOrEmpty(selectedText)) {
-        // TODO: remove this hardcoded 10 crap. Remove selection manipulation:
-        // user will not be happy to see any such side-effects.
-        scintillaGateway.SetSelection(position > 10 ? (position - 10) : (position - position), position);
+        string tag = NppUtils.Notepad.GetCurrentWord();
+        scintillaGateway.SetTargetRange(lineStart, lineStartNext);
+        string lineText = scintillaGateway.GetTargetText();
+
+        if (string.IsNullOrEmpty(lineText))
+          return;
+
+        long tagStartPos = lineText.IndexOf(tag, StringComparison.Ordinal);
+
+        if (tagStartPos < 0)
+          return;
+
+        long selStart = lineStart + tagStartPos;
+        long tagLength = scintillaGateway.CodePage.GetByteCount(tag);
+        long selEnd = selStart + tagLength;
+        scintillaGateway.SetSelection(selStart, selEnd);
         selectedText = scintillaGateway.GetSelText();
-        var reges = Regex.Matches(scintillaGateway.GetSelText(), @"(\w+)");
-        if (reges.Count > 0) {
-          selectedText = reges.Cast<Match>().Select(m => m.Value).LastOrDefault();
-          scintillaGateway.SetSelection(position - selectedText.Length, position);
-          selectedText = scintillaGateway.GetSelText();
-        }
       }
+
+      long position = scintillaGateway.GetSelectionEnd();
+      scintillaGateway.BeginUndoAction();
       try {
-        if (string.IsNullOrEmpty(selectedText)) {
-          throw new Exception("No tag here.");
+        if (string.IsNullOrEmpty(selectedText?.Trim())) {
+          position = scintillaGateway.GetCurrentPos();
+          scintillaGateway.ClearSelectionToCursor();
+          scintillaGateway.CallTipShow(position, "No tag here.");
+          return;
         }
-        byte[] buffer = new byte[1048];
-        var ini = new IniFile(iniFilePath);
+        else if (selectedText.Length > MaxKeyLen) {
+          scintillaGateway.CallTipShow(position, $"Maximum tag length is {MaxKeyLen} characters.");
+          return;
+        }
+
+        LoadConfig();
         string value = ini.Get("Tags", selectedText);
+
         if (string.IsNullOrEmpty(value.Trim('\0'))) {
-          throw new Exception("No tag here.");
+          scintillaGateway.CallTipShow(position, $"Undefined tag: {selectedText}");
+          return;
         }
-        value = TransformTags(value);
-        scintillaGateway.ReplaceSel(value.Replace("|", null));
+
+        long selStart = scintillaGateway.GetSelectionStart();
+        long indentPos = Math.Min(scintillaGateway.GetLineIndentPosition(lineStart), selStart);
+        Tags parser = new(lineStart, indentPos);
+        value = parser.Unescape(value);
+        scintillaGateway.ReplaceSel(Tags.UserDefinedInsertionPoint().Replace(value, string.Empty));
+
+        if (parser.FindAndReplace(selStart) || !Tags.UserDefinedInsertionPoint().IsMatch(value))
+          return;
+
         scintillaGateway.SetSelectionEnd(position + value.Substring(0, value.IndexOf('|')).Length - selectedText.Length);
       } catch (Exception ex) {
         scintillaGateway.CallTipShow(position, ex.Message);
       }
-    }
-
-    /// <summary>
-    /// Transform string by replacing:
-    /// \c with the system Clipboard contents,
-    /// \i with a single indentation level,
-    /// \n with a new line,
-    /// \t with tab character,
-    /// \| with |,
-    /// \\ with \.
-    /// The order of replacements is important.
-    /// </summary>
-    /// <param name="value">Input string from the ini-file's value of the tag.</param>
-    /// <returns>Expanded value with escape sequences replaced.</returns>
-    private static string TransformTags(string value)
-    {
-      // TODO: add more commands: \\, \t.
-      // TODO: does indentation work? I don't see insertions before \n.
-      value = value.Replace("\\n", "\n");
-      if (value.Contains("\\c")) {
-        // TODO: what the heck is this? It's supposed to insert text from the
-        // system Clipboard.
-        value = value.Replace("\\c", "ScintillaGateway scintillaGateway = new ScintillaGateway(currentScint)");
-      }
-      value = value.Replace("\\i", "  ");
-      return value;
+      scintillaGateway.EndUndoAction();
     }
 
     /// <summary>

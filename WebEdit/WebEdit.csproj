@@ -18,9 +18,12 @@
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
     <SelfContained>true</SelfContained>
+    <StackTraceSupport>false</StackTraceSupport>
     <IlcTrimMetadata>true</IlcTrimMetadata>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <EnableUnsafeUTF7Encoding>false</EnableUnsafeUTF7Encoding>
     <IlcGenerateStackTraceData>false</IlcGenerateStackTraceData>
+    <OptimizationPreference>Size</OptimizationPreference>
     <IlcOptimizationPreference>Size</IlcOptimizationPreference>
     <IlcFoldIdenticalMethodBodies>true</IlcFoldIdenticalMethodBodies>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
@@ -29,7 +32,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Npp.DotNet.Plugin" Version="0.1.0-alpha.1" />
+    <PackageReference Include="Npp.DotNet.Plugin" Version="0.2.0-alpha.1" />
   </ItemGroup>
 
   <ItemGroup>

@@ -2,12 +2,14 @@
 
 namespace WebEdit
 {
-  class IniFile(string fileName)
+  partial class IniFile(string fileName)
   {
     public static readonly char ValueStringDelimiter = ';';
 
     private readonly char _keyValueSeparator = '=';
-    private readonly Regex _iniFileComment = new(@"^[;#]\s?");
+
+    [GeneratedRegex(@"^[;#]\s?")]
+    private static partial Regex IniFileComment();
 
     // private const int maxValueLength = 256;
     // private const int maxKeysBuffer = 1024;
@@ -16,8 +18,10 @@ namespace WebEdit
 
     private (string, string) ExtractKeyAndValue(string line)
     {
-      var kv = line?.Split([_keyValueSeparator], StringSplitOptions.RemoveEmptyEntries);
-      return (kv?.Length > 1) ? (kv.First(), string.Join("", kv.Skip(1)).Trim()) : ("", "");
+      var kv =
+        Regex.Split(line ?? string.Empty, $@"(?i)(^[a-z0-9 _\-\&]{{1,{Main.MaxKeyLen}}}){_keyValueSeparator}")
+        .Where(s => s.Trim() != string.Empty);
+      return (kv?.Count() > 1) ? (kv.First(), string.Join("", kv.Skip(1)).Trim()) : ("", "");
     }
 
     /// <summary>
@@ -36,15 +40,15 @@ namespace WebEdit
 
       foreach (var line in File.ReadAllLines(_fileName))
       {
-        if (inSection && !_iniFileComment.IsMatch(line))
+        if (inSection && !IniFileComment().IsMatch(line))
         {
           if (key == null)
             sectionKeys.Add(ExtractKeyAndValue(line).Item1);
-          else if (line.Contains(key))
+          else if (line.StartsWith($"{key}{_keyValueSeparator}", StringComparison.InvariantCultureIgnoreCase))
             return ExtractKeyAndValue(line).Item2;
         }
 
-        inSection = inSection && !line.StartsWith('[') || line.StartsWith($"[{section}]");
+        inSection = inSection && !line.StartsWith('[') || line.StartsWith($"[{section}]", StringComparison.InvariantCultureIgnoreCase);
       }
 
       return string.Join("\0", sectionKeys);
