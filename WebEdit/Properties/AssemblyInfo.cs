@@ -4,14 +4,10 @@ using System.Runtime.InteropServices;
 // General Information about an assembly is controlled through the following
 // set of attributes. Change these attribute values to modify the information
 // associated with an assembly.
-[assembly: AssemblyTitle("WebEdit")]
-[assembly: AssemblyDescription("")]
-[assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("")]
+[assembly: AssemblyTitle("WebEdit plugin for Notepad++")]
+[assembly: AssemblyCompany("Amadeus IT Solutions")]
 [assembly: AssemblyProduct("WebEdit")]
-[assembly: AssemblyCopyright("Copyright © 2021")]
-[assembly: AssemblyTrademark("")]
-[assembly: AssemblyCulture("")]
+[assembly: AssemblyCopyright("© 2008 - 2010 by Alexander Iljin, © 2021 Miguel Febres, © 2025 Robert Di Pardo")]
 
 // Setting ComVisible to false makes the types in this assembly not visible
 // to COM components.  If you need to access a type in this assembly from
@@ -33,3 +29,4 @@ using System.Runtime.InteropServices;
 // [assembly: AssemblyVersion("1.0.*")]
 [assembly: AssemblyVersion("2.7.0.0")]
 [assembly: AssemblyFileVersion("2.7.0.0")]
+[assembly: AssemblyInformationalVersion("2.7.rc.1")]

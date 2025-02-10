@@ -4,6 +4,7 @@ using WebEdit.Properties;
 using static Npp.DotNet.Plugin.Win32;
 using static Npp.DotNet.Plugin.Winforms.WinGDI;
 using static Npp.DotNet.Plugin.Winforms.WinUser;
+using static System.Diagnostics.FileVersionInfo;
 
 namespace WebEdit {
   partial class Main : DotNetPlugin {
@@ -13,15 +14,16 @@ namespace WebEdit {
     private const string MenuCmdPrefix = $"{PluginName} -";
     private const string IniFileName = PluginName + ".ini";
     private const string Version = "2.1";
-    private const string MsgBoxCaption = PluginName + " " + Version;
+    private static string MsgBoxCaption = $"{PluginName} {Version}";
     private const string AboutMsg =
       "This small freeware plugin allows you to wrap the selected text in "
       + "tag pairs and expand abbreviations using a hotkey.\n"
-      + "For more information refer to " + PluginName + ".txt.\n"
+      + "For more information visit https://github.com/npp-dotnet/WebEdit\n"
       + "\n"
       + "Created by Alexander Iljin (Amadeus IT Solutions) using XDS Oberon, "
       + "March 2008 - March 2010.\n"
       + "Ported to C# by Miguel Febres, April 2021.\n"
+      + "Ported to .NET 8 by Robert Di Pardo, February 2025.\n"
       + "Contact e-mail: AlexIljin@users.SourceForge.net";
 
     static IniFile ini = null;
@@ -72,6 +74,13 @@ namespace WebEdit {
       iniDirectory = Path.Combine(npp.GetPluginConfigPath(), PluginName);
       _ = Directory.CreateDirectory(iniDirectory);
       iniFilePath = Path.Combine(iniDirectory, IniFileName);
+      try
+      {
+        MsgBoxCaption =
+          MsgBoxCaption.Replace(Version,
+            GetVersionInfo(Path.Combine(npp.GetPluginsHomePath(), PluginName, $"{PluginName}.dll")).ProductVersion);
+      }
+      catch { }
       LoadConfig();
       var actions = new Actions(ini);
       foreach (string key in actions.iniKeys) {
