@@ -21,16 +21,19 @@ namespace WebEdit
         }
 
         [UnmanagedCallersOnly(EntryPoint = "messageProc", CallConvs = new[] { typeof(CallConvCdecl) })]
-        internal static NativeBool MessageProc(uint msg, UIntPtr wParam, IntPtr lParam) => TRUE;
+        internal static NativeBool MessageProc(uint msg, UIntPtr wParam, IntPtr lParam)
+        {
+            return Instance.OnMessageProc(msg, wParam, lParam);
+        }
 
         [UnmanagedCallersOnly(EntryPoint = "getFuncsArray", CallConvs = new[] { typeof(CallConvCdecl) })]
-        internal static IntPtr GetFuncsArray(IntPtr nbF) => OnGetFuncsArray(nbF);
+        internal static IntPtr GetFuncsArray(IntPtr nbF) => IDotNetPlugin.OnGetFuncsArray(nbF);
 
         [UnmanagedCallersOnly(EntryPoint = "getName", CallConvs = new[] { typeof(CallConvCdecl) })]
-        internal static IntPtr GetName() => OnGetName();
+        internal static IntPtr GetName() => IDotNetPlugin.OnGetName();
 
         [UnmanagedCallersOnly(EntryPoint = "isUnicode", CallConvs = new[] { typeof(CallConvCdecl) })]
-        internal static NativeBool IsUnicode() => OnIsUnicode();
+        internal static NativeBool IsUnicode() => IDotNetPlugin.OnIsUnicode();
 
         static Main()
         {
@@ -39,6 +42,6 @@ namespace WebEdit
         }
 
         private Main(){}
-        private static readonly Main Instance;
+        private static readonly IDotNetPlugin Instance;
     }
 }

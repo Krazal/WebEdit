@@ -7,7 +7,7 @@ using static Npp.DotNet.Plugin.Winforms.WinUser;
 using static System.Diagnostics.FileVersionInfo;
 
 namespace WebEdit {
-  partial class Main : DotNetPlugin {
+  partial class Main : IDotNetPlugin {
     /// <summary>See <see href="https://github.com/alex-ilin/WebEdit/blob/7bb4243/Legacy-v2.1/Src/Tags.ob2#L16"/></summary>
     public const int MaxKeyLen = 32;
     internal const string PluginName = "WebEdit";
@@ -30,7 +30,7 @@ namespace WebEdit {
     static bool isConfigDirty = false;
     internal static string iniDirectory, iniFilePath = null;
 
-    public override void OnBeNotified(ScNotification notification)
+    public void OnBeNotified(ScNotification notification)
     {
       if (notification.Header.HwndFrom == PluginData.NppData.NppHandle)
       {
@@ -44,7 +44,7 @@ namespace WebEdit {
             break;
           case NppMsg.NPPN_FILESAVED:
             if (isConfigDirty &&
-                  (string.Compare(iniFilePath, NppUtils.GetCurrentPath(), StringComparison.InvariantCultureIgnoreCase) == 0))
+                  (string.Compare(iniFilePath, PluginData.Notepad.GetCurrentFilePath(), StringComparison.InvariantCultureIgnoreCase) == 0))
             {
               LoadConfig();
               isConfigDirty = false;
@@ -67,7 +67,7 @@ namespace WebEdit {
     /// initialized later and will use the commands used in the menu added here
     /// to get the command identifiers for the toolbar buttons.
     /// </summary>
-    public override void OnSetInfo()
+    public void OnSetInfo()
     {
       int i = 0;
       var npp = new NotepadPPGateway();
@@ -104,6 +104,8 @@ namespace WebEdit {
       Utils.SetCommand("Load Config", LoadConfig);
       Utils.SetCommand("About...", About);
     }
+
+    public NativeBool OnMessageProc(uint msg, UIntPtr wParam, IntPtr lParam) => TRUE;
 
     /// <summary>
     /// Edit the plugin ini-file in Notepad++.
@@ -156,7 +158,7 @@ namespace WebEdit {
     {
       ToolbarIcon _tbIcons = default;
       ToolbarIconDarkMode tbIcons = default;
-      bool hasDarkMode = NppUtils.NppVersionAtLeast8;
+      bool hasDarkMode = PluginData.Notepad.GetNppVersion() switch { (int maj, _, _) => maj >= 8 };
       var actions = new Actions(ini);
       var icons = ini.GetKeys("Toolbar");
       for (int i = 0; i < actions.iniKeys.Length && i < icons.Length; ++i)
@@ -168,12 +170,12 @@ namespace WebEdit {
           MenuItemToToolbar(ini.Get("Toolbar", icons[i]).Replace("\0", ""), ref tbIcons);
           // The dark mode API requires at least one ICO, or else nothing will display
           if (hasDarkMode && tbIcons.HToolbarIcon != NULL)
-            NppUtils.Notepad.AddToolbarIcon(i, tbIcons);
+            PluginData.Notepad.AddToolbarIcon(i, tbIcons);
           else
           {
             _tbIcons.HToolbarBmp = tbIcons.HToolbarBmp;
             _tbIcons.HToolbarIcon = tbIcons.HToolbarIcon;
-            NppUtils.Notepad.AddToolbarIcon(i, _tbIcons);
+            PluginData.Notepad.AddToolbarIcon(i, _tbIcons);
           }
         }
         catch
@@ -206,7 +208,7 @@ namespace WebEdit {
       string selectedText = scintillaGateway.GetSelText();
 
       if (string.IsNullOrEmpty(selectedText)) {
-        string tag = NppUtils.Notepad.GetCurrentWord();
+        string tag = PluginData.Notepad.GetCurrentWord();
         scintillaGateway.SetTargetRange(lineStart, lineStartNext);
         string lineText = scintillaGateway.GetTargetText();
 
@@ -318,9 +320,9 @@ namespace WebEdit {
     /// </summary>
     private static string GetIconPath(string icon)
     {
-      string path = Path.Combine(NppUtils.Notepad.GetPluginConfigPath(), PluginName, icon);
+      string path = Path.Combine(PluginData.Notepad.GetPluginConfigPath(), PluginName, icon);
       if (!File.Exists(path))
-        path = Path.Combine(NppUtils.Notepad.GetPluginsHomePath(), PluginName, "Config", icon);
+        path = Path.Combine(PluginData.Notepad.GetPluginsHomePath(), PluginName, "Config", icon);
       return path;
     }
 
