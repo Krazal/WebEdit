@@ -23,16 +23,27 @@ jobs:
           7z x .\xds-260-win32.zip
           cmd /c .\Src\compile.bat
           echo D | xcopy /DIY ${{ github.workspace }}\WebEdit\Resources Config
+          $pkgVersion="$((Get-Item ${{ env.PLUGIN_NAME }}.dll).VersionInfo.ProductVersion)"
+          7z a -tzip -y "..\${{ env.PLUGIN_NAME }}.$pkgVersion.win32.zip" ${{ env.PLUGIN_NAME }}.dll .\Config
+          echo "PKG_VERSION=$pkgVersion" >> $env:GITHUB_ENV
           echo "RELEASE_VERSION=$((Get-Item ${{ env.PLUGIN_NAME }}.dll).VersionInfo.FileVersion)" >> $env:GITHUB_ENV
         working-directory: Legacy-v2.1
 
       - name: Upload ${{ env.PLUGIN_NAME }}.${{ env.RELEASE_VERSION }}.win32
+        if: ${{ !contains(github.ref, 'tags') }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ env.PLUGIN_NAME }}.${{ env.RELEASE_VERSION }}.win32
           path: |
             Legacy-v2.1/${{ env.PLUGIN_NAME }}.dll
             Legacy-v2.1/Config/
+
+      - name: Upload ${{ env.PLUGIN_NAME }}.${{ env.PKG_VERSION }}.win32.zip
+        if: ${{ contains(github.ref, 'tags') }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ env.PLUGIN_NAME }}.${{ env.PKG_VERSION }}.win32
+          path: ${{ env.PLUGIN_NAME }}.${{ env.PKG_VERSION }}.win32.zip
 
   publish_aot:
     needs: xds
@@ -57,13 +68,55 @@ jobs:
           dotnet publish -r win-${{ matrix.target_runtime }} -c Release
           echo D | xcopy /DIY .\Resources Config
           echo F | xcopy /DVY .\bin\Release\net8.0-windows\win-${{ matrix.target_runtime }}\native\${{ env.PLUGIN_NAME }}.dll ${{ env.PLUGIN_NAME }}.dll
+          $pkgVersion="$((Get-Item ${{ env.PLUGIN_NAME }}.dll).VersionInfo.ProductVersion)"
+          7z a -tzip -y "..\${{ env.PLUGIN_NAME }}.$pkgVersion.${{ matrix.target_runtime }}.zip" ${{ env.PLUGIN_NAME }}.dll .\Config
+          echo "PKG_VERSION=$pkgVersion" >> $env:GITHUB_ENV
           echo "RELEASE_VERSION=$((Get-Item ${{ env.PLUGIN_NAME }}.dll).VersionInfo.FileVersion)" >> $env:GITHUB_ENV
         working-directory: WebEdit
 
       - name: Upload ${{ env.PLUGIN_NAME }}.${{ env.RELEASE_VERSION }}.${{ matrix.target_runtime }}
+        if: ${{ !contains(github.ref, 'tags') }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ env.PLUGIN_NAME }}.${{ env.RELEASE_VERSION }}.${{ matrix.target_runtime }}
           path: |
             WebEdit/${{ env.PLUGIN_NAME }}.dll
             WebEdit/Config/
+
+      - name: Upload ${{ env.PLUGIN_NAME }}.${{ env.PKG_VERSION }}.${{ matrix.target_runtime }}.zip
+        if: ${{ contains(github.ref, 'tags') }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ env.PLUGIN_NAME }}.${{ env.PKG_VERSION }}.${{ matrix.target_runtime }}
+          path: ${{ env.PLUGIN_NAME }}.${{ env.PKG_VERSION }}.${{ matrix.target_runtime }}.zip
+
+  publish_release:
+      if: ${{ contains(github.ref, 'tags') && github.event_name == 'push' }}
+      runs-on: ubuntu-latest
+      permissions:
+        contents: write
+      needs:
+        - xds
+        - publish_aot
+      steps:
+        - name: Fetch release artifacts
+          uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+          with:
+            path: bin
+            merge-multiple: true
+
+        - name: Generate release notes
+          run: |
+            printf '#### SHA256 Checksums\n\n' > sha256sums.md
+            find . -maxdepth 1 -type f -iname \*.zip -exec sh -c 'printf "    %s\n" "$(sha256sum $(basename $1))" >> sha256sums.md' _ {} \;
+          working-directory: bin
+
+        - name: Publish release
+          uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631 # v2.2.2
+          with:
+            body_path: 'bin/sha256sums.md'
+            fail_on_unmatched_files: true
+            files: "bin/*.zip"
+            name: "${{ github.ref_name }}"
+            prerelease: ${{ contains(github.ref_name, 'pre') || contains(github.ref_name, 'rc') }}
+            tag_name: "${{ github.ref_name }}"
