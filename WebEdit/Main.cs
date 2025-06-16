@@ -245,7 +245,12 @@ namespace WebEdit {
         string value = ini.Get("Tags", selectedText);
 
         if (string.IsNullOrEmpty(value.Trim('\0'))) {
-          scintillaGateway.CallTipShow(position, $"Undefined tag: {selectedText}");
+          unsafe
+          {
+            // encode selection according to the document in case it's in ASCII mode
+            fixed (byte* pText = scintillaGateway.CodePage.GetBytes($"Undefined tag: {selectedText}\0"))
+              SendMessage(currentScint, SciMsg.SCI_CALLTIPSHOW, (UIntPtr)position, (IntPtr)pText);
+          }
           return;
         }
 
