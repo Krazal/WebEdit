@@ -25,7 +25,10 @@
     <DebugSymbols>false</DebugSymbols>
     <SelfContained>true</SelfContained>
     <StackTraceSupport>false</StackTraceSupport>
+    <MetricsSupport>false</MetricsSupport>
+    <DebuggerSupport>false</DebuggerSupport>
     <IlcTrimMetadata>true</IlcTrimMetadata>
+    <MetadataUpdaterSupport>false</MetadataUpdaterSupport>
     <InvariantGlobalization>true</InvariantGlobalization>
     <EnableUnsafeUTF7Encoding>false</EnableUnsafeUTF7Encoding>
     <IlcGenerateStackTraceData>false</IlcGenerateStackTraceData>
@@ -38,7 +41,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Npp.DotNet.Plugin" Version="1.0.0-alpha.2" />
+    <PackageReference Include="Npp.DotNet.Plugin" Version="1.0.0-alpha.4" />
   </ItemGroup>
 
   <ItemGroup>

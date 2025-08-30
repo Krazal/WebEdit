@@ -71,7 +71,7 @@ namespace WebEdit {
     {
       int i = 0;
       var npp = new NotepadPPGateway();
-      iniDirectory = Path.Combine(npp.GetPluginConfigPath(), PluginName);
+      iniDirectory = Path.Combine(npp.GetConfigDirectory(), PluginName);
       _ = Directory.CreateDirectory(iniDirectory);
       iniFilePath = Path.Combine(iniDirectory, IniFileName);
       try
@@ -325,7 +325,7 @@ namespace WebEdit {
     /// </summary>
     private static string GetIconPath(string icon)
     {
-      string path = Path.Combine(PluginData.Notepad.GetPluginConfigPath(), PluginName, icon);
+      string path = Path.Combine(PluginData.Notepad.GetConfigDirectory(), PluginName, icon);
       if (!File.Exists(path))
         path = Path.Combine(PluginData.Notepad.GetPluginsHomePath(), PluginName, "Config", icon);
       return path;
