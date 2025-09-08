@@ -41,7 +41,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Npp.DotNet.Plugin" Version="1.0.0-alpha.4" />
+    <PackageReference Include="Npp.DotNet.Plugin" Version="1.0.0-alpha.5" />
   </ItemGroup>
 
   <ItemGroup>
