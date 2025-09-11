@@ -44,7 +44,7 @@ namespace WebEdit
         {
           if (key == null)
             sectionKeys.Add(ExtractKeyAndValue(line).Item1);
-          else if (line.StartsWith($"{key}{_keyValueSeparator}", StringComparison.InvariantCultureIgnoreCase))
+          else if (line.StartsWith($"{key}{_keyValueSeparator}", StringComparison.InvariantCulture))
             return ExtractKeyAndValue(line).Item2;
         }
 
