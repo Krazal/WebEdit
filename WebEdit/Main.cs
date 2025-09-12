@@ -215,7 +215,18 @@ namespace WebEdit {
         if (string.IsNullOrEmpty(lineText))
           return;
 
-        long tagStartPos = lineText.IndexOf(tag, StringComparison.Ordinal);
+        // Find the last occurrence of the tag in the current line before the caret
+        long tagStartPos = -1;
+        long caretPosInLine = scintillaGateway.GetCurrentPos() - lineStart;
+        int searchPos = 0;
+        while (searchPos < lineText.Length)
+        {
+            int foundPos = lineText.IndexOf(tag, searchPos, StringComparison.Ordinal);
+            if (foundPos == -1 || foundPos + tag.Length > caretPosInLine)
+                break;
+            tagStartPos = foundPos;
+            searchPos = foundPos + 1;
+        }
 
         if (tagStartPos < 0)
           return;
@@ -228,8 +239,8 @@ namespace WebEdit {
       }
 
       long position = scintillaGateway.GetSelectionEnd();
-      scintillaGateway.BeginUndoAction();
       try {
+        scintillaGateway.BeginUndoAction();
         if (string.IsNullOrEmpty(selectedText?.Trim())) {
           position = scintillaGateway.GetCurrentPos();
           scintillaGateway.ClearSelectionToCursor();
@@ -266,8 +277,9 @@ namespace WebEdit {
         scintillaGateway.SetSelectionEnd(position + value.Substring(0, value.IndexOf('|')).Length - selectedText.Length);
       } catch (Exception ex) {
         scintillaGateway.CallTipShow(position, ex.Message);
+      } finally {
+        scintillaGateway.EndUndoAction();
       }
-      scintillaGateway.EndUndoAction();
     }
 
     /// <summary>
