@@ -41,3 +41,7 @@ scripts/** text eol=lf
 # Executables
 *.[dD][lL][lL] 	   -diff -text
 *.[eE][xE][eE] 	   -diff -text
+
+# GitHub language stats
+# https://github.com/github-linguist/linguist/blob/main/docs/overrides.md
+*.ob2              linguist-vendored
