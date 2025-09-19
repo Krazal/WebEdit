@@ -269,7 +269,7 @@ namespace WebEdit {
         value = parser.Unescape(value);
         scintillaGateway.ReplaceSel(Tags.UserDefinedInsertionPoint().Replace(value, string.Empty));
 
-        if (parser.FindAndReplace(selStart) || !Tags.UserDefinedInsertionPoint().IsMatch(value))
+        if ((parser.FindAndReplace(selStart) && value.IndexOf('|') == -1) || !Tags.UserDefinedInsertionPoint().IsMatch(value))
           return;
 
         scintillaGateway.SetSelectionEnd(position + value.Substring(0, value.IndexOf('|')).Length - selectedText.Length);

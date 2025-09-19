@@ -62,6 +62,9 @@ namespace WebEdit
       ScintillaGateway sci = new(Utils.GetCurrentScintilla());
       bool didReplace = false, didIndent = false;
 
+      // track the caret position resulting from the FIRST '\i' replacement
+      long firstIndentCaret = -1;
+
       Dictionary<string, Action> replacements = new()
       {
         {"\\f", PasteFileContents},
@@ -82,6 +85,11 @@ namespace WebEdit
           long selStart = sci.GetTargetStart() + seqStart;
           sci.SetSelection(selStart, selStart + sci.CodePage.GetByteCount(seq));
           replaceFunc();
+
+          // capture the caret position produced by the first '\i' replacement
+          if (seq == "\\i" && firstIndentCaret == -1)
+            firstIndentCaret = sci.GetSelectionEnd();
+
           sci.SetTargetRange(sci.GetSelectionEnd(), sci.GetTextLength());
           seqStart = sci.GetTargetText().IndexOf(seq);
         }
@@ -89,7 +97,9 @@ namespace WebEdit
 
       if (didIndent)
       {
-        sci.SetCurrentPos(sci.GetSelectionEnd());
+        // move caret to the position recorded for the first '\i' replacement;
+        // fall back to current selection end if something went wrong.
+        sci.SetCurrentPos(firstIndentCaret > -1 ? firstIndentCaret : sci.GetSelectionEnd());
         sci.ClearSelectionToCursor();
       }
 
@@ -150,7 +160,7 @@ namespace WebEdit
     }
 
     /// <summary>
-    /// Matches a single, unescaped '|'.
+    /// Matches a single, unescaped '|'
     /// </summary>
     [GeneratedRegex(@"(?<!\\)\|")]
     internal static partial Regex UserDefinedInsertionPoint();
