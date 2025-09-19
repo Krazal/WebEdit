@@ -272,6 +272,7 @@ namespace WebEdit {
         if ((parser.FindAndReplace(selStart) && value.IndexOf('|') == -1) || !Tags.UserDefinedInsertionPoint().IsMatch(value))
           return;
 
+        // Known issue: if an indentation is *before* the '|' caret position marker, the text between them may be selected
         scintillaGateway.SetSelectionEnd(position + value.Substring(0, value.IndexOf('|')).Length - selectedText.Length);
       } catch (Exception ex) {
         scintillaGateway.CallTipShow(position, ex.Message);
