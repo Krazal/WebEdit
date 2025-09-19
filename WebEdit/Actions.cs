@@ -33,7 +33,7 @@ namespace WebEdit {
 
     public PluginFunc GetCommand(int index)
     {
-      return _commands.TryGetValue(index, out string cmdString) ? () => ExecuteCommand(cmdString) : null;
+        return _commands.TryGetValue(index, out string cmdString) && !string.IsNullOrWhiteSpace(cmdString) ? () => ExecuteCommand(cmdString) : null;
     }
   }
 }

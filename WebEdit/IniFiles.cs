@@ -19,7 +19,7 @@ namespace WebEdit
     private (string, string) ExtractKeyAndValue(string line)
     {
       var kv =
-        Regex.Split(line ?? string.Empty, $@"(?i)(^[a-z0-9 _\-\&]{{1,{Main.MaxKeyLen}}}){_keyValueSeparator}")
+        Regex.Split(line ?? string.Empty, $@"(?i)(^[\p{{L}}\p{{N}} _\-\&]{{1,{Main.MaxKeyLen}}}){_keyValueSeparator}") // For Unicode support: `a-z0-9` » `\p{{L}}\p{{N}}`
         .Where(s => s.Trim() != string.Empty);
       return (kv?.Count() > 1) ? (kv.First(), string.Join("", kv.Skip(1)).Trim()) : ("", "");
     }
@@ -55,6 +55,9 @@ namespace WebEdit
     }
 
     public string[] GetKeys(string section)
-      => Get(section).Trim('\0').Split('\0');
+    {
+      var keys = Get(section).Trim('\0');
+      return string.IsNullOrEmpty(keys) ? Array.Empty<string>() : keys.Split('\0');
+    }
   }
 }

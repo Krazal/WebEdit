@@ -28,6 +28,8 @@ namespace WebEdit {
 
     static IniFile ini = null;
     static bool isConfigDirty = false;
+    private static string[] currentCommandKeys = null;
+    private static bool currentCommandKeysAlerted = false;
     internal static string iniDirectory, iniFilePath = null;
 
     public void OnBeNotified(ScNotification notification)
@@ -69,7 +71,6 @@ namespace WebEdit {
     /// </summary>
     public void OnSetInfo()
     {
-      int i = 0;
       var npp = new NotepadPPGateway();
       iniDirectory = Path.Combine(npp.GetConfigDirectory(), PluginName);
       _ = Directory.CreateDirectory(iniDirectory);
@@ -82,27 +83,7 @@ namespace WebEdit {
       }
       catch { }
       LoadConfig();
-      var actions = new Actions(ini);
-      foreach (string key in actions.iniKeys) {
-        var methodInfo = actions.GetCommand(i++);
-        if (methodInfo == null)
-          break;
-
-        Utils.SetCommand(
-          $"{MenuCmdPrefix} {key}",
-          () =>
-          {
-            var cmds = new Actions(ini);
-            cmds.ExecuteCommand(ini.Get("Commands", key));
-          });
-      }
-      Utils.SetCommand(
-        "Replace Tag", ReplaceTag,
-        new ShortcutKey(FALSE, TRUE, FALSE, 13));
-      Utils.MakeSeparator();
-      Utils.SetCommand("Edit Config", EditConfig);
-      Utils.SetCommand("Load Config", LoadConfig);
-      Utils.SetCommand("About...", About);
+      SetMenuItemNames();
     }
 
     public NativeBool OnMessageProc(uint msg, UIntPtr wParam, IntPtr lParam) => TRUE;
@@ -191,7 +172,6 @@ namespace WebEdit {
     {
       // This method is called when the plugin is notified about Npp shutdown.
       PluginData.PluginNamePtr = NULL;
-      PluginData.FuncItems.Dispose();
     }
 
     /// <summary>
@@ -216,24 +196,42 @@ namespace WebEdit {
           return;
 
         // Find the last occurrence of the tag in the current line before the caret
-        long tagStartPos = -1;
-        long caretPosInLine = scintillaGateway.GetCurrentPos() - lineStart;
+        // NOTE: Scintilla positions are byte offsets for the document encoding,
+        // while string.IndexOf works on characters. Convert between bytes and chars
+        // using the document encoding to make the search Unicode-aware.
+        long tagStartCharPos = -1;
+
+        // Byte position of the caret relative to the line start
+        long caretBytePosInLine = scintillaGateway.GetCurrentPos() - lineStart;
+
+        // Get the encoded bytes of the line once
+        byte[] lineBytes = scintillaGateway.CodePage.GetBytes(lineText);
+
+        // Clamp caret byte index to available bytes
+        int caretByteIndex = (int)Math.Min(Math.Max(0, caretBytePosInLine), lineBytes.Length);
+
+        // Convert the caret byte offset to a character index
+        int caretCharPos = scintillaGateway.CodePage.GetCharCount(lineBytes, 0, caretByteIndex);
+
         int searchPos = 0;
         while (searchPos < lineText.Length)
         {
-            int foundPos = lineText.IndexOf(tag, searchPos, StringComparison.Ordinal);
-            if (foundPos == -1 || foundPos + tag.Length > caretPosInLine)
-                break;
-            tagStartPos = foundPos;
-            searchPos = foundPos + 1;
+          int foundPos = lineText.IndexOf(tag, searchPos, StringComparison.Ordinal);
+          if (foundPos == -1 || foundPos + tag.Length > caretCharPos)
+            break;
+          tagStartCharPos = foundPos;
+          searchPos = foundPos + 1;
         }
 
-        if (tagStartPos < 0)
+        if (tagStartCharPos < 0)
           return;
 
-        long selStart = lineStart + tagStartPos;
-        long tagLength = scintillaGateway.CodePage.GetByteCount(tag);
-        long selEnd = selStart + tagLength;
+        // Convert the character position of the found tag into a byte position
+        int tagStartByteOffset = scintillaGateway.CodePage.GetByteCount(lineText.AsSpan(0, (int)tagStartCharPos));
+        long selStart = lineStart + tagStartByteOffset;
+
+        long tagLengthBytes = scintillaGateway.CodePage.GetByteCount(tag);
+        long selEnd = selStart + tagLengthBytes;
         scintillaGateway.SetSelection(selStart, selEnd);
         selectedText = scintillaGateway.GetSelText();
       }
@@ -351,7 +349,58 @@ namespace WebEdit {
     /// </remarks>
     private static unsafe void SetMenuItemNames()
     {
-      Actions actions = new(ini);
+      var actions = new Actions(ini);
+
+      // Alert if the [Commands] section has changed
+      if (currentCommandKeys != null && !currentCommandKeys.SequenceEqual(actions.iniKeys))
+      {
+        if (!currentCommandKeysAlerted)
+        {
+          MsgBoxDialog(
+            PluginData.NppData.NppHandle,
+            "The [Commands] configuration has changed. Please restart Notepad++ for all changes to take effect",
+            MsgBoxCaption,
+            (uint)(MsgBox.ICONWARNING | MsgBox.OK));
+        }
+        currentCommandKeysAlerted = true;
+        return;
+      }
+      currentCommandKeys = actions.iniKeys;
+
+      // Add menu items for each command in the [Commands] section of the ini-file
+      int i = 0;
+      bool foundItem = false;
+      foreach (string key in currentCommandKeys)
+      {
+        var methodInfo = actions.GetCommand(i++);
+        if (methodInfo == null)
+        break;
+
+        Utils.SetCommand(
+        $"{MenuCmdPrefix} {key}",
+        () =>
+            {
+            var cmds = new Actions(ini);
+            cmds.ExecuteCommand(ini.Get("Commands", key));
+        });
+        foundItem = true;
+      }
+
+      // Add other menu items (Replace Tag, Edit Config, Load Config and About)
+      if (foundItem)
+      {
+        Utils.MakeSeparator(); // Separator if "Commands" were found
+      }
+      Utils.SetCommand(
+        "Replace Tag", ReplaceTag,
+        new ShortcutKey(FALSE, TRUE, FALSE, 13));
+      Utils.MakeSeparator();
+      Utils.SetCommand("Edit Config", EditConfig);
+      Utils.SetCommand("Load Config", LoadConfig);
+      Utils.SetCommand("About...", About);
+
+      /* DEPRECATED (may cause non-expected behavior)
+      // PluginData.FuncItems.Items.Clear();
       IntPtr hMenu = SendMessage(PluginData.NppData.NppHandle, (uint)NppMsg.NPPM_GETMENUHANDLE, (uint)NppMsg.NPPPLUGINMENU);
       for (int i = 0; i < actions.iniKeys.Length && i < PluginData.FuncItems.Items.Count; ++i)
       {
@@ -366,6 +415,7 @@ namespace WebEdit {
         }
         catch { }
       }
+      */
     }
   }
 }
