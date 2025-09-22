@@ -266,14 +266,49 @@ namespace WebEdit {
         long selStart = scintillaGateway.GetSelectionStart();
         long indentPos = Math.Min(scintillaGateway.GetLineIndentPosition(lineStart), selStart);
         Tags parser = new(lineStart, indentPos);
+        // scintillaGateway.ReplaceSel(Tags.UserDefinedInsertionPoint().Replace(value, string.Empty));
+        bool isUDInsPoint = Tags.UserDefinedInsertionPoint().IsMatch(value);
+        if (isUDInsPoint) {
+          // Replace only the first occurrence of the user-defined insertion point with a never-occurring sequence
+          value = Tags.UserDefinedInsertionPoint().Replace(value, "\n\r", 1); // Replace only the first match
+        }
         value = parser.Unescape(value);
-        scintillaGateway.ReplaceSel(Tags.UserDefinedInsertionPoint().Replace(value, string.Empty));
+        scintillaGateway.ReplaceSel(value);
 
-        if ((parser.FindAndReplace(selStart) && value.IndexOf('|') == -1) || !Tags.UserDefinedInsertionPoint().IsMatch(value))
+        if (parser.FindAndReplace(selStart) && !isUDInsPoint)
           return;
 
-        // Known issue: if an indentation is *before* the '|' caret position marker, the text between them may be selected
-        scintillaGateway.SetSelectionEnd(position + value.Substring(0, value.IndexOf('|')).Length - selectedText.Length);
+        // Move the caret to the user-defined insertion point if present
+        if (isUDInsPoint)
+        {
+          // Find the literal placeholder sequence we inserted ("\n\r") and move the caret there,
+          // then remove the placeholder characters.
+          scintillaGateway.SetTargetRange(selStart, scintillaGateway.GetTextLength());
+          string tail = scintillaGateway.GetTargetText();
+          int foundIndex = tail.IndexOf("\n\r", StringComparison.Ordinal);
+          if (foundIndex >= 0)
+          {
+            // Compute byte offset of the found placeholder relative to document start
+            long bytesBefore = scintillaGateway.CodePage.GetByteCount(tail.AsSpan(0, foundIndex));
+            long placeholderDocPos = selStart + bytesBefore;
+            long placeholderByteLen = scintillaGateway.CodePage.GetByteCount("\n\r");
+
+            // Remove the placeholder
+            scintillaGateway.SetSelection(placeholderDocPos, placeholderDocPos + placeholderByteLen);
+            scintillaGateway.ReplaceSel(string.Empty);
+
+            // Place the caret where the placeholder used to be
+            scintillaGateway.SetCurrentPos(placeholderDocPos);
+            scintillaGateway.ClearSelectionToCursor();
+          }
+          else
+          {
+            // Fallback: if we can't find the placeholder, restore caret to insertion end
+            scintillaGateway.SetCurrentPos(position);
+            scintillaGateway.ClearSelectionToCursor();
+          }
+        }
+
       } catch (Exception ex) {
         scintillaGateway.CallTipShow(position, ex.Message);
       } finally {
