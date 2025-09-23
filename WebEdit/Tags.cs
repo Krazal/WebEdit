@@ -69,6 +69,8 @@ namespace WebEdit
       {
         {"\\f", PasteFileContents},
         {"\\c", sci.Paste},
+        {"\\d", PasteDateTime},
+        {"\\u", PasteUserName},
         // must come last as the caret will be restored here
         {"\\i", sci.Tab}
       };
@@ -160,10 +162,67 @@ namespace WebEdit
     }
 
     /// <summary>
+    /// Try to replace a date string in format <c>\\d:"date_time_string"</c>.
+    /// </summary>
+    /// <remarks>
+    /// For custom date/time format strings see: <see href="https://learn.microsoft.com/en-us/dotnet/standard/base-types/custom-date-and-time-format-strings"/>
+    /// </remarks>
+    private void PasteDateTime()
+    {
+      ScintillaGateway sci = new(Utils.GetCurrentScintilla());
+      long startPos = sci.GetSelectionStart();
+      sci.SetTargetRange(startPos, sci.GetTextLength());
+      string text = sci.GetTargetText();
+      var matches = UserDefinedDateRegex().Matches(text);
+      int offset = 0;
+      foreach (Match match in matches.Cast<Match>())
+      {
+        if (!match.Success) continue;
+        string format = match.Groups[1].Value;
+        string formattedDate;
+        try
+        {
+            formattedDate = DateTime.Now.ToString(format);
+        }
+        catch
+        {
+            formattedDate = DateTime.Now.ToString("yyyy-MM-dd hh:mm:ss"); // fallback
+        }
+        int matchStart = match.Index + offset;
+        int matchEnd = matchStart + match.Length;
+        sci.SetSelection(sci.GetTargetStart() + matchStart, sci.GetTargetStart() + matchEnd);
+        sci.ReplaceSel(formattedDate);
+        offset += formattedDate.Length - match.Length;
+      }
+
+    }
+
+    /// <summary>
+    /// Paste the short Windows username for the '\u' tag.
+    /// </summary>
+    private void PasteUserName()
+    {
+      ScintillaGateway sci = new(Utils.GetCurrentScintilla());
+      string user = Environment.UserName ?? string.Empty;
+      sci.ReplaceSel(user);
+    }
+
+    /// <summary>
     /// Matches a single, unescaped '|'
     /// </summary>
     [GeneratedRegex(@"(?<!\\)\|")]
     internal static partial Regex UserDefinedInsertionPoint();
+
+    /// <summary>
+    /// Matches an unescaped `\d:` followed by a quoted date,
+    /// e.g. <c>\d:"yyyy-MM-dd"</c> (2025-12-31), <c>\d:'F'</c> (Wednesday, December 31, 2025 12:30:59) etc.
+    /// Captures the date string (format specifier).
+    /// </summary>
+    /// <remarks>
+    /// For custom date/time format strings see: <see href="https://learn.microsoft.com/en-us/dotnet/standard/base-types/custom-date-and-time-format-strings"/>
+    /// </remarks>
+    [GeneratedRegex(@"\\d:[""']([^""']+)[""']")]
+    private static partial Regex UserDefinedDateRegex();
 
     private readonly long _tabStartPos = tabStartPos;
     private readonly long _tabEndPos = tabEndPos;

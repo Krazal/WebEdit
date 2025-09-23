@@ -13,7 +13,7 @@ namespace WebEdit {
     internal const string PluginName = "WebEdit";
     private const string MenuCmdPrefix = $"{PluginName} -";
     private const string IniFileName = PluginName + ".ini";
-    private const string Version = "2.1";
+    private const string Version = "2.8";
     private static string MsgBoxCaption = $"{PluginName} {Version}";
     private const string AboutMsg =
       "This small freeware plugin allows you to wrap the selected text in "
@@ -24,6 +24,7 @@ namespace WebEdit {
       + "March 2008 - March 2010.\n"
       + "Ported to C# by Miguel Febres, April 2021.\n"
       + "Ported to .NET 8 by Robert Di Pardo, February 2025.\n"
+      + "Currently maintained by Richard Stockinger, September 2025.\n"
       + "Contact e-mail: AlexIljin@users.SourceForge.net";
 
     static IniFile ini = null;
