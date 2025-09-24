@@ -30,13 +30,13 @@ namespace WebEdit
       StringBuilder text = new(value);
       ScintillaGateway sci = new(Utils.GetCurrentScintilla());
       sci.SetTargetRange(_tabStartPos, _tabEndPos);
-      // string indent = sci.GetTargetText();
+      string indent = sci.GetTargetText();
       // literal DOS EOL
-      text.Replace("\\r\\n", $"\r\n{sci.LineDelimiter}"); // ORIG: $"\r\n{indent}" (???) <-- Unexpected Behavior: the pre-cursor text (code in the given line) also inserted into the next line
+      text.Replace("\\r\\n", $"\r\n{indent}");
       // literal carriage return
-      text.Replace("\\r", $"\r{sci.LineDelimiter}"); // ORIG: $"\r{indent}" <-- See above
+      text.Replace("\\r", $"\r{indent}");
       // document-specific EOL
-      text.Replace("\\n", $"{sci.LineDelimiter}"); // ORIG: $"{sci.LineDelimiter}{indent}" <-- See above
+      text.Replace("\\n", $"{sci.LineDelimiter}{indent}");
       text.Replace("\\t", "\t");
       text.Replace("\\|", "|");
       text.Replace("\\\\", "\\");

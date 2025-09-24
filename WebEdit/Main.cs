@@ -265,7 +265,7 @@ namespace WebEdit {
         }
 
         long selStart = scintillaGateway.GetSelectionStart();
-        long indentPos = Math.Min(scintillaGateway.GetLineIndentPosition(lineStart), selStart);
+        long indentPos = Math.Min(lineStart + (scintillaGateway.GetUseTabs() ? (scintillaGateway.GetLineIndentation(lineCurrent) / scintillaGateway.GetTabWidth()) : scintillaGateway.GetLineIndentation(lineCurrent)), selStart);
         Tags parser = new(lineStart, indentPos);
         // scintillaGateway.ReplaceSel(Tags.UserDefinedInsertionPoint().Replace(value, string.Empty));
         bool isUDInsPoint = Tags.UserDefinedInsertionPoint().IsMatch(value);
