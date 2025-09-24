@@ -1,6 +1,6 @@
 MAINICON ICON "..\..\Logo.ico"
-#define WEBEDIT_VERSION_STRING "2.8.0.0\000"
-#define WEBEDIT_VERSION_WORDS 2,8,0,0
+#define WEBEDIT_VERSION_STRING "2.8.1.0\000"
+#define WEBEDIT_VERSION_WORDS 2,8,1,0
 
 1 VERSIONINFO
 FILEVERSION WEBEDIT_VERSION_WORDS
@@ -18,7 +18,7 @@ BLOCK "StringFileInfo"
       VALUE "LegalCopyright", "© 2008 - 2010 by Alexander Iljin\000"
       VALUE "FileDescription", "WebEdit plugin for Notepad++ (Unicode).\000"
       VALUE "FileVersion", WEBEDIT_VERSION_STRING
-      VALUE "ProductVersion", "2.8.0.0\000"
+      VALUE "ProductVersion", "2.8.1.0\000"
       VALUE "ProductName", "WebEdit\000"
       VALUE "InternalName", "WebEdit\000"
       VALUE "OriginalFilename", "WebEditU.dll\000"

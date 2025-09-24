@@ -30,13 +30,13 @@ namespace WebEdit
       StringBuilder text = new(value);
       ScintillaGateway sci = new(Utils.GetCurrentScintilla());
       sci.SetTargetRange(_tabStartPos, _tabEndPos);
-      string indent = sci.GetTargetText();
+      // string indent = sci.GetTargetText();
       // literal DOS EOL
-      text.Replace("\\r\\n", $"\r\n{indent}");
+      text.Replace("\\r\\n", $"\r\n{sci.LineDelimiter}"); // ORIG: $"\r\n{indent}" (???) <-- Unexpected Behavior: the pre-cursor text (code in the given line) also inserted into the next line
       // literal carriage return
-      text.Replace("\\r", $"\r{indent}");
+      text.Replace("\\r", $"\r{sci.LineDelimiter}"); // ORIG: $"\r{indent}" <-- See above
       // document-specific EOL
-      text.Replace("\\n", $"{sci.LineDelimiter}{indent}");
+      text.Replace("\\n", $"{sci.LineDelimiter}"); // ORIG: $"{sci.LineDelimiter}{indent}" <-- See above
       text.Replace("\\t", "\t");
       text.Replace("\\|", "|");
       text.Replace("\\\\", "\\");
@@ -61,6 +61,7 @@ namespace WebEdit
     {
       ScintillaGateway sci = new(Utils.GetCurrentScintilla());
       bool didReplace = false, didIndent = false;
+      long rangeEnd = sci.GetSelectionEnd();
 
       // track the caret position resulting from the FIRST '\i' replacement
       long firstIndentCaret = -1;
@@ -71,28 +72,35 @@ namespace WebEdit
         {"\\c", sci.Paste},
         {"\\d", PasteDateTime},
         {"\\u", PasteUserName},
+        {"\\x", PasteFileName},
+        {"\\p", PasteFilePath},
         // must come last as the caret will be restored here
         {"\\i", sci.Tab}
       };
 
       foreach ((string seq, var replaceFunc) in replacements)
       {
-        sci.SetTargetRange(startPos, sci.GetTextLength());
-        long seqStart = sci.GetTargetText().IndexOf(seq);
+        sci.SetTargetRange(startPos, rangeEnd); // `sci.GetTextLength()` is NOT recommended as `end` position: it may replace unrelevant elements too (in the document)!
+        int seqStart = sci.GetTargetText().IndexOf(seq);
         didReplace = didReplace || seqStart > -1;
         didIndent = didReplace && seq == "\\i";
 
         while (seqStart > -1)
         {
+          var tmpTargetText = sci.GetTargetText().Substring(0, seqStart);
+          int tmpByteDiff   = sci.CodePage.GetByteCount(tmpTargetText) - tmpTargetText.Length;
+          if (tmpByteDiff > 0)
+            seqStart += sci.CodePage.GetByteCount(tmpTargetText) - tmpTargetText.Length; // Adjust for multi-byte characters
           long selStart = sci.GetTargetStart() + seqStart;
-          sci.SetSelection(selStart, selStart + sci.CodePage.GetByteCount(seq));
+          sci.SetSelection(selStart, selStart + seq.Length); // sci.CodePage.GetByteCount(seq)
           replaceFunc();
+          rangeEnd += (sci.GetSelectionEnd() - selStart) - seq.Length; // sci.CodePage.GetByteCount(seq)
 
           // capture the caret position produced by the first '\i' replacement
           if (seq == "\\i" && firstIndentCaret == -1)
             firstIndentCaret = sci.GetSelectionEnd();
 
-          sci.SetTargetRange(sci.GetSelectionEnd(), sci.GetTextLength());
+          sci.SetTargetRange(sci.GetSelectionEnd(), rangeEnd); // ORIG: sci.GetTextLength()
           seqStart = sci.GetTargetText().IndexOf(seq);
         }
       }
@@ -205,6 +213,26 @@ namespace WebEdit
       ScintillaGateway sci = new(Utils.GetCurrentScintilla());
       string user = Environment.UserName ?? string.Empty;
       sci.ReplaceSel(user);
+    }
+
+    /// <summary>
+    /// Paste the current file name for the '\x' tag e.g. 'example.txt'
+    /// </summary>
+    private void PasteFileName()
+    {
+      ScintillaGateway sci = new(Utils.GetCurrentScintilla());
+      string fileName = Path.GetFileName(PluginData.Notepad.GetCurrentFilePath()); // `PluginData.Notepad.GetCurrentFile()` or similar function (for `NppMsg.NPPM_GETFILENAME`) is not available...
+      sci.ReplaceSel(fileName);
+    }
+
+    /// <summary>
+    /// Paste the current file name for the '\p' tag e.g. 'C:\path\to\example.txt'
+    /// </summary>
+    private void PasteFilePath()
+    {
+      ScintillaGateway sci = new(Utils.GetCurrentScintilla());
+      string fileName = PluginData.Notepad.GetCurrentFilePath();
+      sci.ReplaceSel(fileName);
     }
 
     /// <summary>

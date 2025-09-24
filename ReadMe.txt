@@ -13,6 +13,14 @@ v2.8 — New features (examples)
     - Replaced with the local date/time. An optional .NET-style date/time format string may be supplied in quotes.
     - Examples:
       - `datetime=Created: \d:"yyyy-MM-dd HH:mm:ss"` → inserts date/time in 24h ISO-like format.
+  - \x
+    - Replaced with the current filename/document name (without path).
+    - Example:
+      - `file=Filename: \x`
+  - \p
+    - Replaced with the current file path (full path including filename).
+    - Example:
+      - `path=File path: \p`
 - Small usability improvements:
   - Better handling of Unicode and long replacements.
   - Improved behavior for caret placement after tag replacement e.g. when multiple pipe characters are present.
