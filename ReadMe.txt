@@ -1,3 +1,16 @@
+ █████   ███   █████          █████     ██████████     █████  ███   █████
+░░███   ░███  ░░███          ░░███     ░░███░░░░░█    ░░███  ░░░   ░░███
+ ░███   ░███   ░███   ██████  ░███████  ░███  █ ░   ███████  ████  ███████
+ ░███   ░███   ░███  ███░░███ ░███░░███ ░██████    ███░░███ ░░███ ░░░███░
+ ░░███  █████  ███  ░███████  ░███ ░███ ░███░░█   ░███ ░███  ░███   ░███
+  ░░░█████░█████░   ░███░░░   ░███ ░███ ░███ ░   █░███ ░███  ░███   ░███ ███
+    ░░███ ░░███     ░░██████  ████████  ██████████░░████████ █████  ░░█████
+     ░░░   ░░░       ░░░░░░  ░░░░░░░░  ░░░░░░░░░░  ░░░░░░░░ ░░░░░    ░░░░░
+
+
+============================================================================
+
+
 WebEdit v2.8 - current (64-bit compatible) — New features overview
 
 Note: This file contains two sections. The first section documents the current WebEdit v2.8 enhancements (added to the modern, 64-bit-capable plugin). The second section contains the original, unchanged legacy documentation for WebEdit v2.1 (32‑bit). The legacy section is preserved verbatim for historical/reference purposes.
@@ -44,7 +57,7 @@ Ported to C# by Miguel Febres, April 2021.
 Ported to .NET 8 by Robert Di Pardo, February 2025.
 Currently maintained by Richard Stockinger, September 2025.
 
-----------------------------------------------------------------------
+----------------------------------------------------------------------------
 Legacy documentation (unchanged) — WebEdit v2.1 - freeware open-source plugin for 32-bit Notepad++ ANSI/Unicode.
 
 WebEdit v2.1 - freeware open-source plugin for 32-bit Notepad++ ANSI/Unicode.
