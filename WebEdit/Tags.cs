@@ -17,7 +17,7 @@ namespace WebEdit
     /// \n with a new line string determined by current EOL mode
     /// \t with the tab character
     /// \| with |
-    /// \\ with \
+    /// \\ with \ (UNNECESSARY/DEPRECATED)
     /// </code>
     /// </summary>
     /// <param name="value">Input string from the ini-file's value of the tag.</param>
@@ -27,19 +27,24 @@ namespace WebEdit
     /// </remarks>
     internal string Unescape(string value)
     {
-      StringBuilder text = new(value);
       ScintillaGateway sci = new(Utils.GetCurrentScintilla());
       sci.SetTargetRange(_tabStartPos, _tabEndPos);
       string indent = sci.GetTargetText();
-      // literal DOS EOL
-      text.Replace("\\r\\n", $"\r\n{indent}");
-      // literal carriage return
-      text.Replace("\\r", $"\r{indent}");
-      // document-specific EOL
-      text.Replace("\\n", $"{sci.LineDelimiter}{indent}");
-      text.Replace("\\t", "\t");
-      text.Replace("\\|", "|");
-      text.Replace("\\\\", "\\");
+      value = Regex.Replace(value, "(?<!\\\\)\\\\r(?<!\\\\)\\\\n", $"\r\n{indent}"); // literal DOS EOL
+      value = Regex.Replace(value, "(?<!\\\\)\\\\r", $"\r{indent}"); // literal carriage return
+      value = Regex.Replace(value, "(?<!\\\\)\\\\n", $"\n{indent}"); // document-specific EOL
+      value = Regex.Replace(value, "(?<!\\\\)\\\\t", $"\t{indent}"); // tab character
+      value = Regex.Replace(value, "(?<!\\\\)\\|",   $"|{indent}");  // cursor
+      // value = Regex.Replace(value, "\\\\", "\\");                 // escape character (not needed)
+
+      // Handle escaped sequences
+      StringBuilder text = new(value);
+      text.Replace("\\\\r\\\\n", "\\r\\n"); // literal DOS EOL (escaped)
+      text.Replace("\\\\r", "\\r");  // literal carriage return (escaped)
+      text.Replace("\\\\n", "\\n");  // document-specific EOL (escaped)
+      text.Replace("\\\\t", "\\t");  // tab character (escaped)
+      text.Replace("\\|", "|");      // cursor (escaped)
+      // text.Replace("\\\\", "\\"); // escape character (not needed)
       return text.ToString();
     }
 
@@ -70,12 +75,11 @@ namespace WebEdit
       {
         {"\\f", PasteFileContents},
         {"\\c", sci.Paste},
-        {"\\d", PasteDateTime},
         {"\\u", PasteUserName},
         {"\\x", PasteFileName},
         {"\\p", PasteFilePath},
-        // must come last as the caret will be restored here
-        {"\\i", sci.Tab}
+        {"\\d", PasteDateTime},
+        {"\\i", sci.Tab} // must come last as the caret will be restored here!
       };
 
       foreach ((string seq, var replaceFunc) in replacements)
@@ -93,8 +97,22 @@ namespace WebEdit
             seqStart += sci.CodePage.GetByteCount(tmpTargetText) - tmpTargetText.Length; // Adjust for multi-byte characters
           long selStart = sci.GetTargetStart() + seqStart;
           sci.SetSelection(selStart, selStart + seq.Length); // sci.CodePage.GetByteCount(seq)
-          replaceFunc();
+          if (seqStart == 0 || sci.GetCharAt(selStart - 1) != 92) // Backspace (\)
+          {
+            replaceFunc();
+          }
+          else
+          {
+            sci.SetSelection(selStart - 1, selStart + seq.Length);
+            sci.ReplaceSel(seq);
+            rangeEnd--;
+          }
+          sci.SetCurrentPos(sci.GetSelectionEnd());
           rangeEnd += (sci.GetSelectionEnd() - selStart) - seq.Length; // sci.CodePage.GetByteCount(seq)
+
+          // Capture the first date only!
+          if (seq == "\\d")
+            break; // TODO: replacing the first occurrence (Unicode issue?) -- rangeEnd may be wrong as using `seq.Length`!
 
           // capture the caret position produced by the first '\i' replacement
           if (seq == "\\i" && firstIndentCaret == -1)
@@ -200,7 +218,8 @@ namespace WebEdit
         int matchEnd = matchStart + match.Length;
         sci.SetSelection(sci.GetTargetStart() + matchStart, sci.GetTargetStart() + matchEnd);
         sci.ReplaceSel(formattedDate);
-        offset += formattedDate.Length - match.Length;
+        return; // Hotfix: only replace the first occurrence (Unicode issue?)
+        // offset += (formattedDate.Length - match.Length);
       }
 
     }
@@ -249,7 +268,7 @@ namespace WebEdit
     /// <remarks>
     /// For custom date/time format strings see: <see href="https://learn.microsoft.com/en-us/dotnet/standard/base-types/custom-date-and-time-format-strings"/>
     /// </remarks>
-    [GeneratedRegex(@"\\d:[""']([^""']+)[""']")]
+    [GeneratedRegex(@"(?<!\\)\\d:[""']([^""']+)[""']")]
     private static partial Regex UserDefinedDateRegex();
 
     private readonly long _tabStartPos = tabStartPos;

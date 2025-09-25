@@ -9,7 +9,7 @@ v2.8 — New features (examples)
     - Replaced with the current Windows user name (the user account running Notepad++).
     - Example tag line in `WebEdit.ini`:
       user=Author: \u|
-  - \d:"format"
+  - \d:"format" (experimental)
     - Replaced with the local date/time. An optional .NET-style date/time format string may be supplied in quotes.
     - Examples:
       - `datetime=Created: \d:"yyyy-MM-dd HH:mm:ss"` → inserts date/time in 24h ISO-like format.
