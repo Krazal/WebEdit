@@ -1,31 +1,39 @@
- █████   ███   █████          █████     ██████████     █████  ███   █████
-░░███   ░███  ░░███          ░░███     ░░███░░░░░█    ░░███  ░░░   ░░███
- ░███   ░███   ░███   ██████  ░███████  ░███  █ ░   ███████  ████  ███████
- ░███   ░███   ░███  ███░░███ ░███░░███ ░██████    ███░░███ ░░███ ░░░███░
- ░░███  █████  ███  ░███████  ░███ ░███ ░███░░█   ░███ ░███  ░███   ░███
-  ░░░█████░█████░   ░███░░░   ░███ ░███ ░███ ░   █░███ ░███  ░███   ░███ ███
-    ░░███ ░░███     ░░██████  ████████  ██████████░░████████ █████  ░░█████
-     ░░░   ░░░       ░░░░░░  ░░░░░░░░  ░░░░░░░░░░  ░░░░░░░░ ░░░░░    ░░░░░
+  █████   ███   █████          █████     ██████████     █████  ███   █████
+ ░░███   ░███  ░░███          ░░███     ░░███░░░░░█    ░░███  ░░░   ░░███
+  ░███   ░███   ░███   ██████  ░███████  ░███  █ ░   ███████  ████  ███████
+  ░███   ░███   ░███  ███░░███ ░███░░███ ░██████    ███░░███ ░░███ ░░░███░
+  ░░███  █████  ███  ░███████  ░███ ░███ ░███░░█   ░███ ░███  ░███   ░███
+   ░░░█████░█████░   ░███░░░   ░███ ░███ ░███ ░   █░███ ░███  ░███   ░███ ███
+     ░░███ ░░███     ░░██████  ████████  ██████████░░████████ █████  ░░█████
+      ░░░   ░░░       ░░░░░░  ░░░░░░░░  ░░░░░░░░░░  ░░░░░░░░ ░░░░░    ░░░░░
 
 
-============================================================================
+===============================================================================
 
 
 WebEdit v2.8 - current (64-bit compatible) — New features overview
 
-Note: This file contains two sections. The first section documents the current WebEdit v2.8 enhancements (added to the modern, 64-bit-capable plugin). The second section contains the original, unchanged legacy documentation for WebEdit v2.1 (32‑bit). The legacy section is preserved verbatim for historical/reference purposes.
+Note: This file contains two sections. The first section documents the current
+WebEdit v2.8 enhancements (added to the modern, 64-bit-capable plugin). The
+second section contains the original, unchanged legacy documentation for
+WebEdit v2.1 (32‑bit). The legacy section is preserved verbatim for
+historical/reference purposes.
 
 v2.8 — New features (examples)
-- 64-bit Notepad++ support and compatibility updates for modern Notepad++ builds.
+- 64-bit Notepad++ support and compatibility updates for modern Notepad++
+  builds.
 - New tag escape sequences for dynamic insertion:
   - \u
-    - Replaced with the current Windows user name (the user account running Notepad++).
+    - Replaced with the current Windows user name (the user account running
+      Notepad++).
     - Example tag line in `WebEdit.ini`:
       user=Author: \u|
   - \d:"format" (experimental)
-    - Replaced with the local date/time. An optional .NET-style date/time format string may be supplied in quotes.
+    - Replaced with the local date/time. An optional .NET-style date/time
+      format string may be supplied in quotes.
     - Examples:
-      - `datetime=Created: \d:"yyyy-MM-dd HH:mm:ss"` → inserts date/time in 24h ISO-like format.
+      - `datetime=Created: \d:"yyyy-MM-dd HH:mm:ss"` → inserts date/time in 24h
+        ISO-like format.
   - \x
     - Replaced with the current filename/document name (without path).
     - Example:
@@ -36,29 +44,37 @@ v2.8 — New features (examples)
       - `path=File path: \p`
 - Small usability improvements:
   - Better handling of Unicode and long replacements.
-  - Improved behavior for caret placement after tag replacement e.g. when multiple pipe characters are present.
+  - Improved behavior for caret placement after tag replacement e.g. when
+    multiple pipe characters are present.
   - Backwards-compatible with existing `WebEdit.ini` files.
 
 Notes on using the new tags
-- Place the tag definitions in the `[Tags]` section of your `WebEdit.ini` file the same way as before. The new escape sequences behave the same as existing escapes (they are expanded inside Replacement text).
+- Place the tag definitions in the `[Tags]` section of your `WebEdit.ini` file
+  the same way as before. The new escape sequences behave the same as existing
+  escapes (they are expanded inside Replacement text).
 - Examples to add to `WebEdit.ini`:
   - `user=Author: \u|`
   - `now=Date/Time: \d:"yyyy-MM-dd HH:mm:ss"`
   - `árv=Árvíztűrő tükörfúrógép` (Hungarian pangram with accented characters)
-- If you rely on the legacy 32-bit plugin, see the legacy documentation below. The legacy plugin (v2.1) may be unchanged and is documented verbatim in the section that follows.
+- If you rely on the legacy 32-bit plugin, see the legacy documentation below.
+  The legacy plugin (v2.1) may be unchanged and is documented verbatim in the
+  section that follows.
 
 CREDITS
 -------
-This small freeware plugin allows you to wrap the selected text in tag pairs and expand abbreviations using a hotkey.
+This small freeware plugin allows you to wrap the selected text in tag pairs
+and expand abbreviations using a hotkey.
 For more information visit https://github.com/Krazal/WebEdit
 
-Created by Alexander Iljin (Amadeus IT Solutions) using XDS Oberon, March 2008 - March 2010.
+Created by Alexander Iljin (Amadeus IT Solutions) using XDS Oberon,
+March 2008 - March 2010.
 Ported to C# by Miguel Febres, April 2021.
 Ported to .NET 8 by Robert Di Pardo, February 2025.
 Currently maintained by Richard Stockinger, September 2025.
 
-----------------------------------------------------------------------------
-Legacy documentation (unchanged) — WebEdit v2.1 - freeware open-source plugin for 32-bit Notepad++ ANSI/Unicode.
+-------------------------------------------------------------------------------
+Legacy documentation (unchanged) — WebEdit v2.1 - freeware open-source plugin
+for 32-bit Notepad++ ANSI/Unicode.
 
 WebEdit v2.1 - freeware open-source plugin for 32-bit Notepad++ ANSI/Unicode.
 
@@ -151,7 +167,7 @@ The "[Commands]" section format:
 - syntax explanation:
   - [menu item] is the text displayed in the plugin menu ("Paragraph"));
   - [Left text] is the text inserted to the left of current selection ("<p>");
-  - [Right text] is the text inserted to the right of current selection ("</p>");
+  - [Right text] is the text inserted to the right of current sel. ("</p>");
   - all of the above strings are optional;
   - limitations: you can't use "=" in the menu text, and you can't use "|" in
     the Left text.
@@ -168,7 +184,7 @@ Slot numbers are 1..30. The bitmap file should be placed in the plugins/Config
 folder and should contain a bitmap image suitable for the toolbar.
 
 To display custom toolbar buttons Notepad++ should be configured to use "Small
-standard icons" (it is by default). To find this option go to the "Settings - 
+standard icons" (it is by default). To find this option go to the "Settings -
 Preferences..." menu, and in the "Global" tab look for the "Tool bar" group.
 
 The "[Tags]" section format:
