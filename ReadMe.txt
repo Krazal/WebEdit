@@ -28,7 +28,7 @@ v2.8 — New features (examples)
       Notepad++).
     - Example tag line in `WebEdit.ini`:
       user=Author: \u|
-  - \d:"format" (experimental)
+  - \d:"format"
     - Replaced with the local date/time. An optional .NET-style date/time
       format string may be supplied in quotes.
     - Examples:

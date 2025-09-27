@@ -71,15 +71,15 @@ namespace WebEdit
       // track the caret position resulting from the FIRST '\i' replacement
       long firstIndentCaret = -1;
 
-      Dictionary<string, Action> replacements = new()
+      Dictionary<string, Func<int>> replacements = new()
       {
         {"\\f", PasteFileContents},
-        {"\\c", sci.Paste},
+        {"\\c", PasteClipboard},
         {"\\u", PasteUserName},
         {"\\x", PasteFileName},
         {"\\p", PasteFilePath},
         {"\\d", PasteDateTime},
-        {"\\i", sci.Tab} // must come last as the caret will be restored here!
+        {"\\i", PasteTab} // must come last as the caret will be restored here!
       };
 
       foreach ((string seq, var replaceFunc) in replacements)
@@ -91,6 +91,7 @@ namespace WebEdit
 
         while (seqStart > -1)
         {
+          var newSeqLength = -1; // seq.Length
           var tmpTargetText = sci.GetTargetText().Substring(0, seqStart);
           int tmpByteDiff   = sci.CodePage.GetByteCount(tmpTargetText) - tmpTargetText.Length;
           if (tmpByteDiff > 0)
@@ -99,7 +100,7 @@ namespace WebEdit
           sci.SetSelection(selStart, selStart + seq.Length); // sci.CodePage.GetByteCount(seq)
           if (seqStart == 0 || sci.GetCharAt(selStart - 1) != 92) // Backspace (\)
           {
-            replaceFunc();
+            newSeqLength = replaceFunc();
           }
           else
           {
@@ -108,11 +109,7 @@ namespace WebEdit
             rangeEnd--;
           }
           sci.SetCurrentPos(sci.GetSelectionEnd());
-          rangeEnd += (sci.GetSelectionEnd() - selStart) - seq.Length; // sci.CodePage.GetByteCount(seq)
-
-          // Capture the first date only!
-          if (seq == "\\d")
-            break; // TODO: replacing the first occurrence (Unicode issue?) -- rangeEnd may be wrong as using `seq.Length`!
+          rangeEnd += (sci.GetSelectionEnd() - selStart) - (newSeqLength > -1 ? newSeqLength : seq.Length); // sci.CodePage.GetByteCount(seq)
 
           // capture the caret position produced by the first '\i' replacement
           if (seq == "\\i" && firstIndentCaret == -1)
@@ -142,13 +139,13 @@ namespace WebEdit
     /// <remarks>
     /// Adapted from <see href="https://github.com/alex-ilin/WebEdit/blob/7bb4243/Legacy-v2.1/Src/Tags.ob2#L223"/>
     /// </remarks>
-    private void PasteFileContents()
+    private int PasteFileContents()
     {
       ScintillaGateway sci = new(Utils.GetCurrentScintilla());
       long tagStart = sci.GetSelectionEnd();
 
       if ('[' != sci.GetCharAt(tagStart))
-        return;
+        return -1;
 
       long selectionEnd = tagStart;
       while (']' != sci.GetCharAt(selectionEnd) && selectionEnd++ < sci.GetLineEndPosition(tagStart)) ;
@@ -164,7 +161,7 @@ namespace WebEdit
       if (!File.Exists(filePath) ||
           /* do not paste the contents of our own INI file */
           (string.IsNullOrEmpty(section) && string.Compare(filePath, Main.iniFilePath, StringComparison.InvariantCultureIgnoreCase) == 0))
-        return;
+        return -1;
 
       StringBuilder buffer = new();
       if (!string.IsNullOrEmpty(section))
@@ -180,11 +177,25 @@ namespace WebEdit
       }
 
       string replacementText = buffer.ToString().TrimEnd();
+      var newSeqLength = -1;
       if (!string.IsNullOrWhiteSpace(replacementText))
-      {
+      {        
         sci.SetSelection(sci.GetSelectionStart(), selectionEnd + sci.CodePage.GetByteCount("]"));
+        newSeqLength = (int)(sci.GetSelectionEnd() - sci.GetSelectionStart());
         sci.ReplaceSel(replacementText);
       }
+      return newSeqLength;
+    }
+        
+
+    /// <summary>
+    /// Paste the Windows clipboard content for the '\c' tag.
+    /// </summary>
+    private int PasteClipboard()
+    {
+      ScintillaGateway sci = new(Utils.GetCurrentScintilla());
+      sci.Paste();
+      return -1;
     }
 
     /// <summary>
@@ -193,7 +204,7 @@ namespace WebEdit
     /// <remarks>
     /// For custom date/time format strings see: <see href="https://learn.microsoft.com/en-us/dotnet/standard/base-types/custom-date-and-time-format-strings"/>
     /// </remarks>
-    private void PasteDateTime()
+    private int PasteDateTime()
     {
       ScintillaGateway sci = new(Utils.GetCurrentScintilla());
       long startPos = sci.GetSelectionStart();
@@ -217,41 +228,55 @@ namespace WebEdit
         int matchStart = match.Index + offset;
         int matchEnd = matchStart + match.Length;
         sci.SetSelection(sci.GetTargetStart() + matchStart, sci.GetTargetStart() + matchEnd);
+        int newSeqLength = (int)(sci.GetSelectionEnd() - sci.GetSelectionStart());
         sci.ReplaceSel(formattedDate);
-        return; // Hotfix: only replace the first occurrence (Unicode issue?)
+        return newSeqLength; // Hotfix: only replace the first occurrence (Unicode issue?)
         // offset += (formattedDate.Length - match.Length);
       }
-
+      return -1;
     }
 
     /// <summary>
     /// Paste the short Windows username for the '\u' tag.
     /// </summary>
-    private void PasteUserName()
+    private int PasteUserName()
     {
       ScintillaGateway sci = new(Utils.GetCurrentScintilla());
       string user = Environment.UserName ?? string.Empty;
       sci.ReplaceSel(user);
+      return -1;
     }
 
     /// <summary>
     /// Paste the current file name for the '\x' tag e.g. 'example.txt'
     /// </summary>
-    private void PasteFileName()
+    private int PasteFileName()
     {
       ScintillaGateway sci = new(Utils.GetCurrentScintilla());
       string fileName = Path.GetFileName(PluginData.Notepad.GetCurrentFilePath()); // `PluginData.Notepad.GetCurrentFile()` or similar function (for `NppMsg.NPPM_GETFILENAME`) is not available...
       sci.ReplaceSel(fileName);
+      return -1;
     }
 
     /// <summary>
     /// Paste the current file name for the '\p' tag e.g. 'C:\path\to\example.txt'
     /// </summary>
-    private void PasteFilePath()
+    private int PasteFilePath()
     {
       ScintillaGateway sci = new(Utils.GetCurrentScintilla());
-      string fileName = PluginData.Notepad.GetCurrentFilePath();
-      sci.ReplaceSel(fileName);
+      string filePath = PluginData.Notepad.GetCurrentFilePath();
+      sci.ReplaceSel(filePath);
+      return -1;
+    }
+
+    /// <summary>
+    /// Paste tab for the '\t' tag
+    /// </summary>
+    private int PasteTab()
+    {
+      ScintillaGateway sci = new(Utils.GetCurrentScintilla());
+      sci.Tab();
+      return -1;
     }
 
     /// <summary>
