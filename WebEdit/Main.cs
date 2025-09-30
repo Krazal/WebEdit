@@ -258,10 +258,9 @@ namespace WebEdit {
           
           // Try to find a similar tag
           int shortestDistance = -1;
-          var actions = new Actions(ini);
           var similarTags = ini.GetKeys("Tags");
           var closestTag = string.Empty;
-          for (int i = 0; i < actions.iniKeys.Length && i < similarTags.Length; ++i)
+          for (int i = 0; i < similarTags.Length; ++i)
           {
             int tmpDistance = calculateLevenshtein(selectedText, similarTags[i]);
             if (tmpDistance < selectedText.Length && (tmpDistance < shortestDistance || shortestDistance < 0))
