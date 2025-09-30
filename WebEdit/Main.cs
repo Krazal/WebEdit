@@ -255,11 +255,34 @@ namespace WebEdit {
         string value = ini.Get("Tags", selectedText);
 
         if (string.IsNullOrEmpty(value.Trim('\0'))) {
+          
+          // Try to find a similar tag
+          int shortestDistance = -1;
+          var actions = new Actions(ini);
+          var similarTags = ini.GetKeys("Tags");
+          var closestTag = string.Empty;
+          for (int i = 0; i < actions.iniKeys.Length && i < similarTags.Length; ++i)
+          {
+            int tmpDistance = calculateLevenshtein(selectedText, similarTags[i]);
+            if (tmpDistance < selectedText.Length && (tmpDistance < shortestDistance || shortestDistance < 0))
+            {
+              shortestDistance = tmpDistance;
+              closestTag = similarTags[i];
+            }
+          }
+
+          // Show calltip with the closest tag found, or an undefined tag message
           unsafe
           {
-            // encode selection according to the document in case it's in ASCII mode
-            fixed (byte* pText = scintillaGateway.CodePage.GetBytes($"Undefined tag: {selectedText}\0"))
-              SendMessage(currentScint, SciMsg.SCI_CALLTIPSHOW, (UIntPtr)position, (IntPtr)pText);
+            if (shortestDistance >= 0) {
+              // encode selection according to the document in case it's in ASCII mode
+              fixed (byte* pText = scintillaGateway.CodePage.GetBytes($"Did you mean: \"{closestTag}\"?\0"))
+                SendMessage(currentScint, SciMsg.SCI_CALLTIPSHOW, (UIntPtr)position, (IntPtr)pText);
+            } else {
+              // encode selection according to the document in case it's in ASCII mode
+              fixed (byte* pText = scintillaGateway.CodePage.GetBytes($"Undefined tag: \"{selectedText}\"\0"))
+                SendMessage(currentScint, SciMsg.SCI_CALLTIPSHOW, (UIntPtr)position, (IntPtr)pText);
+            }
           }
           return;
         }
@@ -453,6 +476,50 @@ namespace WebEdit {
         catch { }
       }
       */
+    }
+
+
+    /// <summary>
+    ///   Calculate the difference between 2 strings using the Levenshtein distance algorithm
+    /// </summary>
+    /// <param name="source1">First string</param>
+    /// <param name="source2">Second string</param>
+    /// <remarks>
+    /// Adapted from <see href="https://gist.github.com/Davidblkx/e12ab0bb2aff7fd8072632b396538560"/>
+    /// </remarks>
+    public static int calculateLevenshtein(string source1, string source2) //O(n*m)
+    {
+      var source1Length = source1.Length;
+      var source2Length = source2.Length;
+
+      var matrix = new int[source1Length + 1, source2Length + 1];
+
+      // First calculation, if one entry is empty return full length
+      if (source1Length == 0)
+        return source2Length;
+
+      if (source2Length == 0)
+        return source1Length;
+
+      // Initialization of matrix with row size source1Length and columns size source2Length
+      for (var i = 0; i <= source1Length; matrix[i, 0] = i++) { }
+      for (var j = 0; j <= source2Length; matrix[0, j] = j++) { }
+
+      // Calculate rows and collumns distances
+      for (var i = 1; i <= source1Length; i++)
+      {
+        for (var j = 1; j <= source2Length; j++)
+        {
+          var cost = (source2[j - 1] == source1[i - 1]) ? 0 : 1;
+
+          matrix[i, j] = Math.Min(
+            Math.Min(matrix[i - 1, j] + 1, matrix[i, j - 1] + 1),
+              matrix[i - 1, j - 1] + cost);
+        }
+      }
+
+      // Return result
+      return matrix[source1Length, source2Length];
     }
   }
 }

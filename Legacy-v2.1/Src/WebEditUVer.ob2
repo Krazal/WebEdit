@@ -1,6 +1,6 @@
 MODULE WebEditUVer;
 
 CONST
-   String* = '2.8.1.2';
+   String* = '2.8.2.0';
 
 END WebEditUVer.
