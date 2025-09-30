@@ -332,6 +332,9 @@ namespace WebEdit {
           }
         }
 
+        // Hide calltip if shown
+        SendMessage(currentScint, (uint)SciMsg.SCI_CALLTIPCANCEL);
+
       } catch (Exception ex) {
         scintillaGateway.CallTipShow(position, ex.Message);
       } finally {
