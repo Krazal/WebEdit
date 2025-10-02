@@ -332,8 +332,11 @@ namespace WebEdit {
           }
         }
 
-        // Hide calltip if shown
-        SendMessage(currentScint, (uint)SciMsg.SCI_CALLTIPCANCEL);
+        // Hide calltip/autocompletion if visible
+        if (scintillaGateway.CallTipActive()) // For the sake of completeness...
+          SendMessage(currentScint, (uint)SciMsg.SCI_CALLTIPCANCEL);
+        if (scintillaGateway.AutoCActive()) // && !scintillaGateway.AutoCGetCurrent() <-- Does it make sense to check this?
+          SendMessage(currentScint, (uint)SciMsg.SCI_AUTOCCANCEL);
 
       } catch (Exception ex) {
         scintillaGateway.CallTipShow(position, ex.Message);
