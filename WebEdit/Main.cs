@@ -5,6 +5,7 @@ using static Npp.DotNet.Plugin.Win32;
 using static Npp.DotNet.Plugin.Winforms.WinGDI;
 using static Npp.DotNet.Plugin.Winforms.WinUser;
 using static System.Diagnostics.FileVersionInfo;
+using System.Runtime.InteropServices;
 
 namespace WebEdit {
   partial class Main : IDotNetPlugin {
@@ -15,6 +16,8 @@ namespace WebEdit {
     private const string IniFileName = PluginName + ".ini";
     private const string Version = "2.8";
     private static string MsgBoxCaption = $"{PluginName} {Version}";
+    private static string[] currentCommandKeys = null; // Temporary storage of the current [Commands] keys to detect changes on reload
+    private static bool currentCommandKeysAlerted = false; // Whether the user has been alerted about changes in [Commands] section
     private const string AboutMsg =
       "This small freeware plugin allows you to wrap the selected text in "
       + "tag pairs and expand abbreviations using a hotkey.\n"
@@ -29,8 +32,6 @@ namespace WebEdit {
 
     static IniFile ini = null;
     static bool isConfigDirty = false;
-    private static string[] currentCommandKeys = null;
-    private static bool currentCommandKeysAlerted = false;
     internal static string iniDirectory, iniFilePath = null;
 
     public void OnBeNotified(ScNotification notification)
@@ -52,7 +53,7 @@ namespace WebEdit {
               LoadConfig();
               isConfigDirty = false;
             }
-            SetMenuItemNames();
+            SetMenuItemNames(true);
             break;
           case NppMsg.NPPN_TBMODIFICATION:
             PluginData.FuncItems.RefreshItems();
@@ -407,35 +408,68 @@ namespace WebEdit {
     }
 
     /// <summary>
-    /// Set the text of each menu item, i.e., remove the &quot;WebEdit -  &quot; prefix.
+    /// (Re-)add menu items
     /// </summary>
     /// <remarks>
     /// Adapted from <see href="https://github.com/alex-ilin/WebEdit/blob/7bb4243/Legacy-v2.1/Src/NotepadPPU.ob2#L184"/>
     /// </remarks>
-    private static unsafe void SetMenuItemNames()
+    private static unsafe void SetMenuItemNames(bool isReload = false)
     {
       var actions = new Actions(ini);
 
-      // Alert if the [Commands] section has changed
-      if (currentCommandKeys != null && !currentCommandKeys.SequenceEqual(actions.iniKeys))
+      // Remove previously added plugin menu items so we can re-add them (NOT WORKING AS EXPECTED)
+      // if (isReload)
       {
-        if (!currentCommandKeysAlerted)
+                
+        // Alert if the [Commands] section has changed (TEMPORARY, may be removed in future versions)
+        if (currentCommandKeys != null && !currentCommandKeys.SequenceEqual(actions.iniKeys))
         {
-          MsgBoxDialog(
+          if (!currentCommandKeysAlerted)
+          {
+            MsgBoxDialog(
             PluginData.NppData.NppHandle,
             "The [Commands] configuration has changed. Please restart Notepad++ for all changes to take effect",
             MsgBoxCaption,
             (uint)(MsgBox.ICONWARNING | MsgBox.OK));
+          }
+          currentCommandKeysAlerted = true;
+          return;
         }
-        currentCommandKeysAlerted = true;
-        return;
+        currentCommandKeys = actions.iniKeys;
+
+        /*
+        // Remove all previously added menu items (NOT WORKING AS EXPECTED)
+        try
+        {
+          IntPtr hMenu = SendMessage(PluginData.NppData.NppHandle, (uint)NppMsg.NPPM_GETMENUHANDLE, (uint)NppMsg.NPPPLUGINMENU);
+          if (hMenu != IntPtr.Zero)
+          {
+            // Iterate the registered function items and delete them by command id.
+            // Iterate backwards to avoid any issues with indices when removing.
+            for (int idx = PluginData.FuncItems.Items.Count - 1; idx >= 0; --idx)
+            {
+              try
+              {
+                int cmdId = PluginData.FuncItems.Items[idx].CmdID;
+                if (PluginData.FuncItems.Items[idx].PFunc != null && PluginData.FuncItems.Items[idx].ItemName != "-")
+                  _ = NativeMethods.DeleteMenu(hMenu, (uint)cmdId, MF_BYCOMMAND); // Delete the menu item by command identifier
+                else
+                  _ = NativeMethods.DeleteMenu(hMenu, (uint)idx, MF_BYPOSITION); // Delete the menu item separator by position
+              }
+              catch { }
+            }
+          }
+        } catch { }
+
+        // Clear the registered function items so Utils.SetCommand can add them again
+        try { PluginData.FuncItems.Items.Clear(); } catch { }
+        */
       }
-      currentCommandKeys = actions.iniKeys;
 
       // Add menu items for each command in the [Commands] section of the ini-file
-      int i = 0;
       bool foundItem = false;
-      foreach (string key in currentCommandKeys)
+      int i = 0;
+      foreach (string key in actions.iniKeys)
       {
         var methodInfo = actions.GetCommand(i++);
         if (methodInfo == null)
@@ -463,6 +497,17 @@ namespace WebEdit {
       Utils.SetCommand("Edit Config", EditConfig);
       Utils.SetCommand("Load Config", LoadConfig);
       Utils.SetCommand("About...", About);
+            
+      /* // Refresh the menu items if this is a reload request (NOT WORKING AS EXPECTED, SEE ABOVE)
+      if (isReload)
+      {
+        PluginData.FuncItems.RefreshItems();
+        _ = NativeMethods.DrawMenuBar(PluginData.NppData.NppHandle);
+      }
+      // */
+
+
+
 
       /* DEPRECATED (may cause non-expected behavior)
       // PluginData.FuncItems.Items.Clear();
@@ -525,6 +570,16 @@ namespace WebEdit {
 
       // Return result
       return matrix[source1Length, source2Length];
+    }
+
+    // P/Invoke helpers not present in Win32 wrapper
+    private static class NativeMethods
+    {
+      [DllImport("user32", SetLastError = true)]
+      public static extern bool DeleteMenu(IntPtr hMenu, uint uPosition, uint uFlags);
+
+      [DllImport("user32")]
+      public static extern bool DrawMenuBar(IntPtr hWnd);
     }
   }
 }
