@@ -18,6 +18,7 @@ namespace WebEdit {
     private static string MsgBoxCaption = $"{PluginName} {Version}";
     private static string[] currentCommandKeys = null; // Temporary storage of the current [Commands] keys to detect changes on reload
     private static bool currentCommandKeysAlerted = false; // Whether the user has been alerted about changes in [Commands] section
+    private static bool isPluginAutoCompletion = false;
     private const string AboutMsg =
       "This small freeware plugin allows you to wrap the selected text in "
       + "tag pairs and expand abbreviations using a hotkey.\n"
@@ -36,6 +37,8 @@ namespace WebEdit {
 
     public void OnBeNotified(ScNotification notification)
     {
+
+      // Handle Notepad++ notifications
       if (notification.Header.HwndFrom == PluginData.NppData.NppHandle)
       {
         uint code = notification.Header.Code;
@@ -62,6 +65,38 @@ namespace WebEdit {
           case NppMsg.NPPN_SHUTDOWN:
             PluginCleanUp();
             break;
+        }
+      }
+
+      // Handle Scintilla notifications (auto-completion)
+      if (notification.Header.HwndFrom == Utils.GetCurrentScintilla())
+      {
+        bool isACReset = false;
+        uint code = notification.Header.Code;
+        var scintillaGateway = new ScintillaGateway(Utils.GetCurrentScintilla());
+        switch ((SciMsg)code)
+        {
+          case SciMsg.SCN_AUTOCSELECTION:
+            if (isPluginAutoCompletion)
+              scintillaGateway.ReplaceSel(""); // Remove the original text from autocompletion
+            break;
+          case SciMsg.SCN_AUTOCCOMPLETED:
+            if (isPluginAutoCompletion)
+            {
+              ReplaceTag(); // Replace the autocompleted tag
+              isACReset = true;
+            }
+            break;
+          case SciMsg.SCN_AUTOCCANCELLED:
+            if (isPluginAutoCompletion)
+              isACReset = true;
+            break;
+        }
+
+        // Ready for the next autocompletion
+        if (isACReset)
+        {
+          isPluginAutoCompletion = false;
         }
       }
     }
@@ -256,28 +291,38 @@ namespace WebEdit {
         string value = ini.Get("Tags", selectedText);
 
         if (string.IsNullOrEmpty(value.Trim('\0'))) {
-          
-          // Try to find a similar tag
+
+          // Try to find similar tags (even case-insensitive) using Levenshtein distance
           int shortestDistance = -1;
-          var similarTags = ini.GetKeys("Tags");
+          List<string> similarTags = [];
+          var iniTags = ini.GetKeys("Tags");
           var closestTag = string.Empty;
-          for (int i = 0; i < similarTags.Length; ++i)
+          for (int i = 0; i < iniTags.Length; ++i)
           {
-            int tmpDistance = calculateLevenshtein(selectedText, similarTags[i]);
-            if (tmpDistance < selectedText.Length && (tmpDistance < shortestDistance || shortestDistance < 0))
+            int tmpDistance = calculateLevenshtein(selectedText, iniTags[i], true);
+            if (tmpDistance < selectedText.Length) // || (tmpDistance = Math.Min(tmpDistance, calculateLevenshtein(selectedText, iniTags[i], true))) < selectedText.Length
             {
-              shortestDistance = tmpDistance;
-              closestTag = similarTags[i];
+              if (tmpDistance < shortestDistance || shortestDistance < 0)
+              {
+                shortestDistance = tmpDistance;
+                closestTag = iniTags[i];
+              }
+              similarTags.Add(iniTags[i]);
             }
           }
 
-          // Show calltip with the closest tag found, or an undefined tag message
+          // Show autocompletion if similar tags were found, otherwise show a calltip
           unsafe
           {
             if (shortestDistance >= 0) {
-              // encode selection according to the document in case it's in ASCII mode
-              fixed (byte* pText = scintillaGateway.CodePage.GetBytes($"Did you mean: \"{closestTag}\"?\0"))
-                SendMessage(currentScint, SciMsg.SCI_CALLTIPSHOW, (UIntPtr)position, (IntPtr)pText);
+              isPluginAutoCompletion = true;
+              scintillaGateway.AutoCSetSeparator(10); // New line / Line Feed (\n) -- see below
+              scintillaGateway.AutoCSetOrder((Npp.DotNet.Plugin.Scintilla.Ordering)SciMsg.SC_ORDER_PERFORMSORT); // Leave the ordering to Scintilla
+              long lengthEntered    = 0; // Show all items
+              string similarTagList = string.Join("\n", similarTags.Distinct());
+              fixed (byte* pText = scintillaGateway.CodePage.GetBytes(similarTagList + "\0"))
+                SendMessage(currentScint, SciMsg.SCI_AUTOCSHOW, (UIntPtr)lengthEntered, (IntPtr)pText);
+              scintillaGateway.AutoCSelect(closestTag);
             } else {
               // encode selection according to the document in case it's in ASCII mode
               fixed (byte* pText = scintillaGateway.CodePage.GetBytes($"Undefined tag: \"{selectedText}\"\0"))
@@ -534,11 +579,17 @@ namespace WebEdit {
     /// </summary>
     /// <param name="source1">First string</param>
     /// <param name="source2">Second string</param>
+    /// <param name="caseSensitive">Case sensitive calculation?</param>
     /// <remarks>
     /// Adapted from <see href="https://gist.github.com/Davidblkx/e12ab0bb2aff7fd8072632b396538560"/>
     /// </remarks>
-    public static int calculateLevenshtein(string source1, string source2) //O(n*m)
+    public static int calculateLevenshtein(string source1, string source2, bool caseSensitive = false) //O(n*m)
     {
+      if (caseSensitive)
+      {
+        source1 = source1.ToLowerInvariant();
+        source2 = source2.ToLowerInvariant();
+      }
       var source1Length = source1.Length;
       var source2Length = source2.Length;
 
