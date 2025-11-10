@@ -1,11 +1,11 @@
 ﻿using Npp.DotNet.Plugin;
+using System.Runtime.InteropServices;
 using System.Text;
 using WebEdit.Properties;
 using static Npp.DotNet.Plugin.Win32;
 using static Npp.DotNet.Plugin.Winforms.WinGDI;
 using static Npp.DotNet.Plugin.Winforms.WinUser;
 using static System.Diagnostics.FileVersionInfo;
-using System.Runtime.InteropServices;
 
 namespace WebEdit {
   partial class Main : IDotNetPlugin {
@@ -15,20 +15,23 @@ namespace WebEdit {
     private const string MenuCmdPrefix = $"{PluginName} -";
     private const string IniFileName = PluginName + ".ini";
     private const string Version = "2.8";
+    private static string[] currentIniKeys = null; // Temporary storage of the current [Commands] keys to detect changes on reload
+    private static string[] currentToolbarKeys = null; // Temporary storage of the current [Toolbar] keys to detect changes on reload
+    private static bool currentKeysChangeAlerted = false; // Whether the user has been alerted about changes in [Commands] and/or [Toolbar] section
     private static string MsgBoxCaption = $"{PluginName} {Version}";
-    private static string[] currentCommandKeys = null; // Temporary storage of the current [Commands] keys to detect changes on reload
-    private static bool currentCommandKeysAlerted = false; // Whether the user has been alerted about changes in [Commands] section
-    private static bool isPluginAutoCompletion = false;
+    private static bool pluginACOpened = false;
+    private static string pluginACSpecialText = "";
+    private static Dictionary<string, string[]> pluginACIcons = new();
     private const string AboutMsg =
       "This small freeware plugin allows you to wrap the selected text in "
       + "tag pairs and expand abbreviations using a hotkey.\n"
-      + "For more information visit https://github.com/npp-dotnet/WebEdit\n"
+      + "For more information visit https://github.com/Krazal/WebEdit\n"
       + "\n"
       + "Created by Alexander Iljin (Amadeus IT Solutions) using XDS Oberon, "
       + "March 2008 - March 2010.\n"
       + "Ported to C# by Miguel Febres, April 2021.\n"
       + "Ported to .NET 8 by Robert Di Pardo, February 2025.\n"
-      + "Currently maintained by Richard Stockinger, September 2025.\n"
+      + "Maintained by Richard Stockinger since September 2025.\n"
       + "Contact e-mail: AlexIljin@users.SourceForge.net";
 
     static IniFile ini = null;
@@ -68,35 +71,58 @@ namespace WebEdit {
         }
       }
 
+
       // Handle Scintilla notifications (auto-completion)
       if (notification.Header.HwndFrom == Utils.GetCurrentScintilla())
       {
-        bool isACReset = false;
         uint code = notification.Header.Code;
         var scintillaGateway = new ScintillaGateway(Utils.GetCurrentScintilla());
         switch ((SciMsg)code)
         {
-          case SciMsg.SCN_AUTOCSELECTION:
-            if (isPluginAutoCompletion)
-              scintillaGateway.ReplaceSel(""); // Remove the original text from autocompletion
+
+          // User cancelled autocompletion (e.g. add tag)
+          case SciMsg.SCN_AUTOCCANCELLED:
+            pluginACOpened = false;
             break;
-          case SciMsg.SCN_AUTOCCOMPLETED:
-            if (isPluginAutoCompletion)
+
+          // Autocompletion selected; check if the user selected a special autocompletion entry (e.g. add/find tag)
+          case SciMsg.SCN_AUTOCSELECTION:
+            if (pluginACOpened)
             {
-              ReplaceTag(); // Replace the autocompleted tag
-              isACReset = true;
+
+              // Get the autocompletion text in the correct encoding
+              IntPtr textPointer;
+              textPointer = notification.TextPointer;
+              string acSelectedText = (scintillaGateway.CodePage == Encoding.UTF8)
+                ? Marshal.PtrToStringUTF8(textPointer)
+                : Marshal.PtrToStringAnsi(textPointer);
+
+              // Check if the user selected the "find/add tag" entry
+              if (pluginACSpecialText == acSelectedText)
+              {
+                IntPtr currentScint = Utils.GetCurrentScintilla();
+                SendMessage(currentScint, (uint)SciMsg.SCI_AUTOCCANCEL); // Close the AC list; do not modify the current tag
+                EditConfigAddOrFindTag(); // User selected the "find/add tag" entry; open the ini-file to add the new tag
+              }
+              else if (!string.IsNullOrEmpty(ini.Get("Tags", acSelectedText).Trim('\0')))
+              {
+                scintillaGateway.ReplaceSel(""); // Remove the original text before inserting the tag related expansion
+              }
+              else // This is not a plugin related autocompletion (any more)...
+              {
+                pluginACOpened = false;
+              }
             }
             break;
-          case SciMsg.SCN_AUTOCCANCELLED:
-            if (isPluginAutoCompletion)
-              isACReset = true;
-            break;
-        }
 
-        // Ready for the next autocompletion
-        if (isACReset)
-        {
-          isPluginAutoCompletion = false;
+          // Autocompletion was performed; handle tag insertion if necessary
+          case SciMsg.SCN_AUTOCCOMPLETED:
+            if (pluginACOpened)
+            {
+              HandleTag();
+              pluginACOpened = false;
+            }
+            break;
         }
       }
     }
@@ -126,18 +152,159 @@ namespace WebEdit {
     public NativeBool OnMessageProc(uint msg, UIntPtr wParam, IntPtr lParam) => TRUE;
 
     /// <summary>
-    /// Edit the plugin ini-file in Notepad++.
+    /// Open the ini-file in Notepad++ for editing and prepare to add a new tag in [Tags] section
+    /// </summary>
+    internal static void EditConfigAddOrFindTag()
+    {      
+      IntPtr currentScint = Utils.GetCurrentScintilla();
+      ScintillaGateway scintillaGateway = new ScintillaGateway(currentScint);
+      string tagToAddOrFind = scintillaGateway.GetSelText();
+      EditConfig();
+      if (isConfigDirty)
+      {
+        if (string.IsNullOrEmpty(tagToAddOrFind) || tagToAddOrFind.Length > MaxKeyLen)
+          return;
+
+        // Get the entire document text
+        scintillaGateway.SetTargetRange(0, scintillaGateway.GetTextLength());
+        string docText = scintillaGateway.GetTargetText();
+
+        // Find the [Tags] section
+        int tagsSectionStart = docText.IndexOf("[Tags]", StringComparison.InvariantCultureIgnoreCase);
+        if (tagsSectionStart >= 0)
+        {
+
+          // Get the line ending style from Scintilla (shortened variable name)
+          string tmpEOL = scintillaGateway.LineDelimiter; // "\r\n", "\r" or "\n"
+
+          // Try to find the tag in the ini-file
+          string existingValue = ini.Get("Tags", tagToAddOrFind);
+          if (!string.IsNullOrEmpty(existingValue.Trim('\0')))
+          {
+
+            // Scroll to the existing tag
+            int tagPos = docText.IndexOf($"{tmpEOL}{tagToAddOrFind}=", tagsSectionStart + 6);
+            if (tagPos >= 0)
+            {
+              // Convert the character position to byte position for Scintilla
+              int bytePos = scintillaGateway.CodePage.GetByteCount(docText.AsSpan(0, tagPos));
+              int caretPos = bytePos + tmpEOL.Length + scintillaGateway.CodePage.GetByteCount(tagToAddOrFind) + 1;
+              scintillaGateway.SetSelection(caretPos, caretPos);
+              _ = MsgBoxDialog(// Allow time for file (view) loading ^^'
+                PluginData.NppData.NppHandle,
+                $"Tag found: \"{tagToAddOrFind}\"",
+                MsgBoxCaption,
+                (uint)(MsgBox.ICONINFORMATION | MsgBox.OK));
+              scintillaGateway.EnsureVisible(scintillaGateway.LineFromPosition(caretPos));
+              scintillaGateway.ScrollCaret();
+              return;
+            }
+          }
+
+          // No existing tag found - prepare to add a new one (Confirm history drop if REDO is possible)
+          bool needAlert = true;
+          if (scintillaGateway.CanRedo())
+          {
+            DlgResult redoDlgResult = MsgBoxDialog(
+              PluginData.NppData.NppHandle,
+              $"You may lose your \"Redo\" history if you insert the following tag: \"{tagToAddOrFind}\"\n\nContinue?",
+              MsgBoxCaption,
+              (uint)(MsgBox.ICONWARNING | MsgBox.OKCANCEL));
+            if (redoDlgResult != DlgResult.OK)
+              return;
+            needAlert = false;
+          }
+
+          // Find the start of the next section or end of file
+          int nextSectionStart = docText.IndexOf($"{tmpEOL}[", tagsSectionStart + 6);
+          if (nextSectionStart < 0) nextSectionStart = docText.Length;
+
+          // Find the last non-empty line in the [Tags] section
+          int lastTagLineEnd = -1;
+          int searchPos = tagsSectionStart;
+          
+          while (searchPos < nextSectionStart)
+          {
+            int lineEnd = docText.IndexOf(tmpEOL, searchPos);
+            if (lineEnd < 0) break;
+
+            // Reached the next section
+            if (lineEnd == nextSectionStart)
+            {
+              lastTagLineEnd = lineEnd;
+              break;
+            }
+
+            // Check if the line is non-empty and not a comment or section header
+            string line = docText[searchPos..lineEnd].Trim();
+            if (!string.IsNullOrWhiteSpace(line) && !line.StartsWith(";") && !line.StartsWith("#") && !string.Equals(line, "[Tags]", StringComparison.InvariantCultureIgnoreCase))
+            {
+              lastTagLineEnd = lineEnd;
+            }
+
+            // Reached the penultimate (last but one) line of the file
+            int lastLineEnd = docText.LastIndexOf(tmpEOL);
+            if (lineEnd == lastLineEnd && !string.IsNullOrWhiteSpace(docText[lineEnd..nextSectionStart]))
+            {
+              lastTagLineEnd = (docText[lineEnd..nextSectionStart] == tmpEOL)
+                ? lineEnd + tmpEOL.Length // the last line is empty
+                : nextSectionStart; // the last line is non-empty
+              break;
+            }
+
+            searchPos = lineEnd + tmpEOL.Length;
+          }
+
+          // Convert the character position to byte position for Scintilla
+          int insertPos;
+          if (lastTagLineEnd >= 0)
+          {
+            var textBeforeInsert = docText[..lastTagLineEnd];
+            insertPos = scintillaGateway.CodePage.GetByteCount(textBeforeInsert);
+          }
+          else
+          {
+            // No existing tags - insert after [Tags] line
+            var textBeforeInsert = docText[..(tagsSectionStart + 6)];
+            insertPos = scintillaGateway.CodePage.GetByteCount(textBeforeInsert);
+          }
+
+          // Insert the new tag and place the caret after the '=' of the new tag
+          scintillaGateway.SetSelection(insertPos, insertPos);
+          scintillaGateway.ReplaceSel($"{tmpEOL}{tagToAddOrFind}=");
+          long selEnd = scintillaGateway.GetSelectionEnd();
+          scintillaGateway.SetSelection(selEnd, selEnd);
+
+          // Allow time for file (view) loading ^^'
+          if (needAlert)
+            _ = MsgBoxDialog(
+              PluginData.NppData.NppHandle,
+              $"Tag added and ready for editing: \"{tagToAddOrFind}\"",
+              MsgBoxCaption,
+              (uint)(MsgBox.ICONINFORMATION | MsgBox.OK));
+          scintillaGateway.EnsureVisible(scintillaGateway.LineFromPosition(selEnd));
+          scintillaGateway.ScrollCaret();
+        }
+      }
+    }
+
+    /// <summary>
+    /// Open the ini-file in Notepad++ for editing
     /// </summary>
     internal static void EditConfig()
     {
-      if (!new NotepadPPGateway().OpenFile(iniFilePath))
+      if (new NotepadPPGateway().OpenFile(iniFilePath))
+      {
+        isConfigDirty = true;
+      }
+      else
+      {
         _ = MsgBoxDialog(
           PluginData.NppData.NppHandle,
           "Failed to open the configuration file for editing:\n" + iniFilePath,
           MsgBoxCaption,
           (uint)(MsgBox.ICONWARNING | MsgBox.OK));
-      else
-        isConfigDirty = true;
+      }
     }
 
     /// <summary>
@@ -213,9 +380,38 @@ namespace WebEdit {
 
     /// <summary>
     /// Replace the tag at the caret with an expansion defined in the [Tags]
-    /// ini-file section.
+    /// ini-file section. If multiple selections exist, handles each one starting
+    /// from the last selection.
     /// </summary>
     internal static void ReplaceTag()
+    {
+      var cmds = new Actions(ini);
+      cmds.HelpCommands(() => HandleTag(), () => HandleTag(false, true));
+    }
+
+    /// <summary>
+    /// Recommend tags similar to the one at the caret using autocompletion.
+    /// </summary>
+    internal static void RecommendTags()
+    {
+      IntPtr currentScint = Utils.GetCurrentScintilla();
+      ScintillaGateway scintillaGateway = new ScintillaGateway(currentScint);
+      if (scintillaGateway.GetSelections() <= 1) // "There is always at least one selection", but just in case...
+      {
+        // Single (or no) selection - handle normally 
+        HandleTag(true);
+        return;
+      }
+
+      // Multiple selections - notify the user that this is not supported via tooltip
+      scintillaGateway.CallTipShow(scintillaGateway.GetCurrentPos(), "Tag recommendation is not supported in multi-selection mode");
+    }
+
+
+    /// <summary>
+    /// Handle tag replacement or recommendation
+    /// </summary>
+    private static void HandleTag(bool alwaysRecommendTags = false, bool isMultiSelection = false)
     {
       IntPtr currentScint = Utils.GetCurrentScintilla();
       ScintillaGateway scintillaGateway = new ScintillaGateway(currentScint);
@@ -224,13 +420,25 @@ namespace WebEdit {
       long lineStartNext = scintillaGateway.PositionFromLine(lineCurrent + 1);
       string selectedText = scintillaGateway.GetSelText();
 
-      if (string.IsNullOrEmpty(selectedText)) {
+      // Hide calltip/autocompletion if visible
+      if (scintillaGateway.CallTipActive()) // For the sake of completeness...
+        SendMessage(currentScint, (uint)SciMsg.SCI_CALLTIPCANCEL);
+      if (scintillaGateway.AutoCActive())
+        SendMessage(currentScint, (uint)SciMsg.SCI_AUTOCCANCEL);
+
+      if (string.IsNullOrEmpty(selectedText))
+      {
         string tag = PluginData.Notepad.GetCurrentWord();
         scintillaGateway.SetTargetRange(lineStart, lineStartNext);
         string lineText = scintillaGateway.GetTargetText();
+        long tmpPosition = scintillaGateway.GetCurrentPos();
 
         if (string.IsNullOrEmpty(lineText))
+        {
+          if (!isMultiSelection)
+            scintillaGateway.CallTipShow(tmpPosition, "Empty line");
           return;
+        }
 
         // Find the last occurrence of the tag in the current line before the caret
         // NOTE: Scintilla positions are byte offsets for the document encoding,
@@ -239,7 +447,7 @@ namespace WebEdit {
         long tagStartCharPos = -1;
 
         // Byte position of the caret relative to the line start
-        long caretBytePosInLine = scintillaGateway.GetCurrentPos() - lineStart;
+        long caretBytePosInLine = tmpPosition - lineStart;
 
         // Get the encoded bytes of the line once
         byte[] lineBytes = scintillaGateway.CodePage.GetBytes(lineText);
@@ -261,7 +469,11 @@ namespace WebEdit {
         }
 
         if (tagStartCharPos < 0)
+        {
+          if (!isMultiSelection)
+            scintillaGateway.CallTipShow(tmpPosition, "No tag found");
           return;
+        }
 
         // Convert the character position of the found tag into a byte position
         int tagStartByteOffset = scintillaGateway.CodePage.GetByteCount(lineText.AsSpan(0, (int)tagStartCharPos));
@@ -274,33 +486,54 @@ namespace WebEdit {
       }
 
       long position = scintillaGateway.GetSelectionEnd();
-      try {
-        scintillaGateway.BeginUndoAction();
-        if (string.IsNullOrEmpty(selectedText?.Trim())) {
+      try
+      {
+        if (!isMultiSelection)
+          scintillaGateway.BeginUndoAction();
+        if (string.IsNullOrEmpty(selectedText?.Trim()))
+        {
           position = scintillaGateway.GetCurrentPos();
           scintillaGateway.ClearSelectionToCursor();
-          scintillaGateway.CallTipShow(position, "No tag here.");
+          if (!isMultiSelection)
+            scintillaGateway.CallTipShow(position, "No tag here");
           return;
         }
-        else if (selectedText.Length > MaxKeyLen) {
-          scintillaGateway.CallTipShow(position, $"Maximum tag length is {MaxKeyLen} characters.");
+        else if (selectedText.Length > MaxKeyLen)
+        {
+          if (!isMultiSelection)
+            scintillaGateway.CallTipShow(position, $"Maximum tag length is {MaxKeyLen} characters");
           return;
         }
 
         LoadConfig();
         string value = ini.Get("Tags", selectedText);
 
-        if (string.IsNullOrEmpty(value.Trim('\0'))) {
+        // Show AC with similar tags (and/or add tag) if no exact match found or if forced
+        if (!isMultiSelection && (string.IsNullOrEmpty(value.Trim('\0')) || alwaysRecommendTags))
+        {
 
           // Try to find similar tags (even case-insensitive) using Levenshtein distance
           int shortestDistance = -1;
           List<string> similarTags = [];
           var iniTags = ini.GetKeys("Tags");
           var closestTag = string.Empty;
+
+          // Collect similar tags
           for (int i = 0; i < iniTags.Length; ++i)
           {
+
+            // Exact match found (see: RecommendTags)
+            if (selectedText == iniTags[i])
+            {
+              closestTag = iniTags[i];
+              shortestDistance = 0; // Mark as the closest match
+              similarTags.Add(iniTags[i]);
+              continue;
+            }
+
+            // More than half of the tag must match the selected text (to avoid a list that's too long)
             int tmpDistance = calculateLevenshtein(selectedText, iniTags[i], true);
-            if (tmpDistance < selectedText.Length) // || (tmpDistance = Math.Min(tmpDistance, calculateLevenshtein(selectedText, iniTags[i], true))) < selectedText.Length
+            if (tmpDistance <= Math.Max(selectedText.Length, iniTags[i].Length) / 2) // Remove `/ 2` for more results. In this case `<` should be used to find at least one matching character
             {
               if (tmpDistance < shortestDistance || shortestDistance < 0)
               {
@@ -311,35 +544,144 @@ namespace WebEdit {
             }
           }
 
-          // Show autocompletion if similar tags were found, otherwise show a calltip
-          unsafe
+          // Show autocompletion e.g. if similar tags were found
+          int  origACSeparator     = scintillaGateway.AutoCGetSeparator();
+          int  origACTypeSeparator = scintillaGateway.AutoCGetTypeSeparator();
+          bool origACIgnoreCase    = scintillaGateway.AutoCGetIgnoreCase();
+          bool origACAutoHide      = scintillaGateway.AutoCGetAutoHide();
+          scintillaGateway.AutoCSetSeparator(10);      // New line / Line Feed (\n) -- see below
+          scintillaGateway.AutoCSetTypeSeparator(13);  // Carriage Return (\r) -- see `else` block below
+          scintillaGateway.AutoCSetIgnoreCase(false);  // Necessary for `AutoCSelect()` below!
+          scintillaGateway.AutoCSetAutoHide(false);    // Keep AC open until user cancels or selects an entry (fix bug [?] when the first entry is selected, and AC closes immediately)
+          // scintillaGateway.ClearRegisteredImages(); // Not recommended; this may affect Notepad++'s AC images too!
+          pluginACOpened = true;
+          if (shortestDistance >= 0)
           {
-            if (shortestDistance >= 0) {
-              isPluginAutoCompletion = true;
-              scintillaGateway.AutoCSetSeparator(10); // New line / Line Feed (\n) -- see below
-              scintillaGateway.AutoCSetOrder((Npp.DotNet.Plugin.Scintilla.Ordering)SciMsg.SC_ORDER_PERFORMSORT); // Leave the ordering to Scintilla
-              long lengthEntered    = 0; // Show all items
-              string similarTagList = string.Join("\n", similarTags.Distinct());
+            bool isExactMatch = (selectedText == closestTag);
+
+            // XPM image data for the search/add icons -- [Find...]/[Add...] entry/entries (see below)
+            bool hasDarkMode = PluginData.Notepad.GetNppVersion() switch { (int maj, _, _) => maj >= 8 }
+              && SendMessage(PluginData.NppData.NppHandle, (uint)NppMsg.NPPM_ISDARKMODEENABLED) != IntPtr.Zero;
+
+            // Set icon name, aka. `pluginACIcons` key
+            string iconName = isExactMatch
+              ? GetIconPath(hasDarkMode ? "search-dm" : "search")
+              : GetIconPath(hasDarkMode ? "add-dm" : "add");
+
+            // Check if the `pluginACIcons[iconName]` exists + add if necessary (micro-optimization, but why not) (:
+            if (!pluginACIcons.ContainsKey(iconName))
+            {
+
+              // Prepare XPM image data
+              string[] icon2Reg = {
+                "12 12 2 1", // Columns, Rows, Number of colors, Chars per pixel
+                "  c None",  // Transparent background where space character is used
+                hasDarkMode ? ". c #C8C8C8" : ". c #151515",    // Dark/Light mode friendly foreground color where dot character is used
+                isExactMatch ? "   .....    " : "     ..     ", // Pixels: search or add icon
+                isExactMatch ? " .........  " : "     ..     ",
+                isExactMatch ? "...     ... " : "     ..     ",
+                isExactMatch ? "..       .. " : "     ..     ",
+                isExactMatch ? "..       .. " : "     ..     ",
+                isExactMatch ? "..       .. " : "............",
+                isExactMatch ? "...     ... " : "............",
+                isExactMatch ? " .........  " : "     ..     ",
+                isExactMatch ? "   .......  " : "     ..     ",
+                isExactMatch ? "         .. " : "     ..     ",
+                isExactMatch ? "          .." : "     ..     ",
+                isExactMatch ? "           ." : "     ..     "
+              };
+              pluginACIcons[iconName] = icon2Reg;
+            }
+
+            // Register XPM image data with Scintilla
+            unsafe
+            {
+
+              // Convert to (unmanaged) ANSI strings
+              IntPtr[] xpmData = new IntPtr[pluginACIcons[iconName].Length];
+              try
+              {
+                for (int i = 0; i < pluginACIcons[iconName].Length; i++)
+                {
+                  xpmData[i] = Marshal.StringToHGlobalAnsi(pluginACIcons[iconName][i]);
+                }
+
+                // The Scintilla API expects a pointer to an array of pointers to ANSI strings (char*[])
+                fixed (IntPtr* pXpmData = xpmData)
+                  SendMessage(currentScint, (uint)SciMsg.SCI_REGISTERIMAGE, 5001, (IntPtr)pXpmData); // Image ID 5001 -- try to avoid conflicts
+              }
+              finally
+              {
+                for (int i = 0; i < xpmData.Length; i++)
+                {
+                  if (xpmData[i] != IntPtr.Zero)
+                    Marshal.FreeHGlobal(xpmData[i]);
+                }
+              }
+            }
+
+            // Order + join the similar tags by alphabetical order
+            similarTags.Sort(StringComparer.InvariantCultureIgnoreCase);
+            string similarTagList = "\n" + string.Join("\n", similarTags.Distinct()) + "\n";
+
+            // Add find/add option to the AC list
+            pluginACSpecialText = isExactMatch
+              ? $"[Find \"{selectedText}\" in WebEdit.ini]"
+              : $"[Add \"{selectedText}\" to WebEdit.ini]";
+            string similarTagReplaceText = $"{closestTag}\n{pluginACSpecialText}\r5001"; // Closest tag, then find/add + the appropriate icon (ID 5001)
+
+            // Replace the closest tag entry with the find/add instruction at the top
+            similarTagList = similarTagList.Replace($"\n{closestTag}\n", $"\n{similarTagReplaceText}\n").Trim('\n');
+
+            /* NOT WORKED :( -- Added `AutoCSetAutoHide(false)` instead
+            // If the closest tag is the first entry, the Scintilla AC list won't open properly (even if we do NOT call `AutoCSelect()` below [?])
+            // So add a leading newline (empty entry) to workaround this issue
+            if (similarTags[0] == closestTag)
+              similarTagList = "\n" + similarTagList;
+            // */
+
+            // encode tag list according to the document in case it's in ASCII mode
+            unsafe
+            {
               fixed (byte* pText = scintillaGateway.CodePage.GetBytes(similarTagList + "\0"))
-                SendMessage(currentScint, SciMsg.SCI_AUTOCSHOW, (UIntPtr)lengthEntered, (IntPtr)pText);
-              scintillaGateway.AutoCSelect(closestTag);
-            } else {
-              // encode selection according to the document in case it's in ASCII mode
-              fixed (byte* pText = scintillaGateway.CodePage.GetBytes($"Undefined tag: \"{selectedText}\"\0"))
-                SendMessage(currentScint, SciMsg.SCI_CALLTIPSHOW, (UIntPtr)position, (IntPtr)pText);
+                SendMessage(currentScint, SciMsg.SCI_AUTOCSHOW, 0, (IntPtr)pText); // (UIntPtr)lengthEntered (0): show AC all items
+            }
+
+            // Select the closest tag in the AC list
+            // Attention! If the tag (closestTag) isn't found (or it is in the first place inn spec. cases?), the AC list will NOT be displayed!
+            scintillaGateway.AutoCSelect(closestTag);
+          }
+          else
+          {
+            pluginACSpecialText = $"Tag not found. Add \"{selectedText}\" to WebEdit.ini?";
+            unsafe
+            {
+              fixed (byte* pText = scintillaGateway.CodePage.GetBytes(pluginACSpecialText + "\0"))
+                SendMessage(currentScint, SciMsg.SCI_AUTOCSHOW, 0, (IntPtr)pText);
             }
           }
+
+          // Reset AC settings + return
+          scintillaGateway.AutoCSetSeparator(origACSeparator);
+          scintillaGateway.AutoCSetTypeSeparator(origACTypeSeparator);
+          scintillaGateway.AutoCSetIgnoreCase(origACIgnoreCase);
+          scintillaGateway.AutoCSetAutoHide(origACAutoHide);
+          return;
+        }
+        else if (isMultiSelection && string.IsNullOrEmpty(value.Trim('\0')))
+        {
+          // In multi-selection mode, silently skip tags with no defined expansion
           return;
         }
 
         long selStart = scintillaGateway.GetSelectionStart();
         long indentPos = Math.Min(lineStart + (scintillaGateway.GetUseTabs() ? (scintillaGateway.GetLineIndentation(lineCurrent) / scintillaGateway.GetTabWidth()) : scintillaGateway.GetLineIndentation(lineCurrent)), selStart);
         Tags parser = new(lineStart, indentPos);
-        // scintillaGateway.ReplaceSel(Tags.UserDefinedInsertionPoint().Replace(value, string.Empty));
         bool isUDInsPoint = Tags.UserDefinedInsertionPoint().IsMatch(value);
-        if (isUDInsPoint) {
-          // Replace only the first occurrence of the user-defined insertion point with a never-occurring sequence
-          value = Tags.UserDefinedInsertionPoint().Replace(value, "\n\r", 1); // Replace only the first match
+        if (isUDInsPoint)
+        {
+          // Replace the user-defined insertion point with a never-occurring sequence
+          value = Tags.UserDefinedInsertionPoint().Replace(value, "\n\r", 1); // Replace only the FIRST match
         }
         value = parser.Unescape(value);
         scintillaGateway.ReplaceSel(value);
@@ -378,16 +720,15 @@ namespace WebEdit {
           }
         }
 
-        // Hide calltip/autocompletion if visible
-        if (scintillaGateway.CallTipActive()) // For the sake of completeness...
-          SendMessage(currentScint, (uint)SciMsg.SCI_CALLTIPCANCEL);
-        if (scintillaGateway.AutoCActive()) // && !scintillaGateway.AutoCGetCurrent() <-- Does it make sense to check this?
-          SendMessage(currentScint, (uint)SciMsg.SCI_AUTOCCANCEL);
-
-      } catch (Exception ex) {
+      }
+      catch (Exception ex)
+      {
         scintillaGateway.CallTipShow(position, ex.Message);
-      } finally {
-        scintillaGateway.EndUndoAction();
+      }
+      finally
+      {
+        if (!isMultiSelection)
+          scintillaGateway.EndUndoAction();
       }
     }
 
@@ -462,99 +803,86 @@ namespace WebEdit {
     {
       var actions = new Actions(ini);
 
-      // Remove previously added plugin menu items so we can re-add them (NOT WORKING AS EXPECTED)
-      // if (isReload)
+      // Alert if the [Commands] or [Toolbar] section has changed
+      if (currentIniKeys != null && (!currentIniKeys.SequenceEqual(actions.iniKeys) || !currentToolbarKeys.SequenceEqual(actions.toolbarKeys)))
       {
-                
-        // Alert if the [Commands] section has changed (TEMPORARY, may be removed in future versions)
-        if (currentCommandKeys != null && !currentCommandKeys.SequenceEqual(actions.iniKeys))
+        if (!currentKeysChangeAlerted)
         {
-          if (!currentCommandKeysAlerted)
-          {
-            MsgBoxDialog(
-            PluginData.NppData.NppHandle,
-            "The [Commands] configuration has changed. Please restart Notepad++ for all changes to take effect",
-            MsgBoxCaption,
-            (uint)(MsgBox.ICONWARNING | MsgBox.OK));
-          }
-          currentCommandKeysAlerted = true;
-          return;
+          string tmpSection = (currentIniKeys.SequenceEqual(actions.iniKeys))
+            ? "[Toolbar]"
+            : (currentToolbarKeys.SequenceEqual(actions.toolbarKeys))
+              ? "[Commands]"
+              : "[Commands] and [Toolbar]";
+          MsgBoxDialog(
+          PluginData.NppData.NppHandle,
+          $"The {tmpSection} configuration has changed.\n\nPlease restart Notepad++ for all changes to take effect",
+          MsgBoxCaption,
+          (uint)(MsgBox.ICONWARNING | MsgBox.OK));
         }
-        currentCommandKeys = actions.iniKeys;
-
-        /*
-        // Remove all previously added menu items (NOT WORKING AS EXPECTED)
-        try
-        {
-          IntPtr hMenu = SendMessage(PluginData.NppData.NppHandle, (uint)NppMsg.NPPM_GETMENUHANDLE, (uint)NppMsg.NPPPLUGINMENU);
-          if (hMenu != IntPtr.Zero)
-          {
-            // Iterate the registered function items and delete them by command id.
-            // Iterate backwards to avoid any issues with indices when removing.
-            for (int idx = PluginData.FuncItems.Items.Count - 1; idx >= 0; --idx)
-            {
-              try
-              {
-                int cmdId = PluginData.FuncItems.Items[idx].CmdID;
-                if (PluginData.FuncItems.Items[idx].PFunc != null && PluginData.FuncItems.Items[idx].ItemName != "-")
-                  _ = NativeMethods.DeleteMenu(hMenu, (uint)cmdId, MF_BYCOMMAND); // Delete the menu item by command identifier
-                else
-                  _ = NativeMethods.DeleteMenu(hMenu, (uint)idx, MF_BYPOSITION); // Delete the menu item separator by position
-              }
-              catch { }
-            }
-          }
-        } catch { }
-
-        // Clear the registered function items so Utils.SetCommand can add them again
-        try { PluginData.FuncItems.Items.Clear(); } catch { }
-        */
+        currentKeysChangeAlerted = true;
+        return;
       }
+      currentIniKeys = actions.iniKeys;
+      currentToolbarKeys = actions.toolbarKeys;
 
-      // Add menu items for each command in the [Commands] section of the ini-file
+      // Add menu items for each command in the [Commands] section
       bool foundItem = false;
-      int i = 0;
+      int cmdIndex = 0;
       foreach (string key in actions.iniKeys)
       {
-        var methodInfo = actions.GetCommand(i++);
+        var methodInfo = actions.GetCommand(cmdIndex++);
         if (methodInfo == null)
-        break;
+          break;
 
         Utils.SetCommand(
-        $"{MenuCmdPrefix} {key}",
-        () =>
-            {
+          $"{MenuCmdPrefix} {key}",
+          () =>
+          {
             var cmds = new Actions(ini);
+
+            // Alert if the [Commands] or [Toolbar] section has changed
+            if (currentIniKeys != null && (!currentIniKeys.SequenceEqual(cmds.iniKeys) || !currentToolbarKeys.SequenceEqual(cmds.toolbarKeys)))
+            {
+              string tmpSection = (currentIniKeys.SequenceEqual(cmds.iniKeys))
+                ? "[Toolbar]"
+                : (currentToolbarKeys.SequenceEqual(cmds.toolbarKeys))
+                  ? "[Commands]"
+                  : "[Commands] and [Toolbar]";
+              MsgBoxDialog(
+              PluginData.NppData.NppHandle,
+              $"The {tmpSection} section and thus the menu/toolbar configuration has changed.\n\nPlease restart Notepad++ for all changes to take effect",
+              MsgBoxCaption,
+              (uint)(MsgBox.ICONWARNING | MsgBox.OK));
+              return;
+            }
+
+            // Execute the command
             cmds.ExecuteCommand(ini.Get("Commands", key));
-        });
+          });
         foundItem = true;
       }
 
-      // Add other menu items (Replace Tag, Edit Config, Load Config and About)
+      // Add standard menu items
       if (foundItem)
       {
-        Utils.MakeSeparator(); // Separator if "Commands" were found
+        Utils.MakeSeparator();
       }
-      Utils.SetCommand(
-        "Replace Tag", ReplaceTag,
+
+      Utils.SetCommand( // Try to replace tag at caret/selection
+        "&Replace Tag",
+        ReplaceTag,
         new ShortcutKey(FALSE, TRUE, FALSE, 13));
+      Utils.SetCommand( // Always show AC with recommended tags
+        "R&ecommend Tags",
+        RecommendTags,
+        new ShortcutKey(FALSE, TRUE, TRUE, 13));
       Utils.MakeSeparator();
-      Utils.SetCommand("Edit Config", EditConfig);
-      Utils.SetCommand("Load Config", LoadConfig);
-      Utils.SetCommand("About...", About);
-            
-      /* // Refresh the menu items if this is a reload request (NOT WORKING AS EXPECTED, SEE ABOVE)
-      if (isReload)
-      {
-        PluginData.FuncItems.RefreshItems();
-        _ = NativeMethods.DrawMenuBar(PluginData.NppData.NppHandle);
-      }
-      // */
+      Utils.SetCommand("E&dit Config", EditConfig);
+      Utils.SetCommand("&Load Config", LoadConfig);
+      Utils.SetCommand("&About...", About);
 
 
-
-
-      /* DEPRECATED (may cause non-expected behavior)
+      /* DEPRECATED (may cause unexpected behavior)
       // PluginData.FuncItems.Items.Clear();
       IntPtr hMenu = SendMessage(PluginData.NppData.NppHandle, (uint)NppMsg.NPPM_GETMENUHANDLE, (uint)NppMsg.NPPPLUGINMENU);
       for (int i = 0; i < actions.iniKeys.Length && i < PluginData.FuncItems.Items.Count; ++i)
@@ -573,7 +901,6 @@ namespace WebEdit {
       */
     }
 
-
     /// <summary>
     ///   Calculate the difference between 2 strings using the Levenshtein distance algorithm
     /// </summary>
@@ -583,7 +910,7 @@ namespace WebEdit {
     /// <remarks>
     /// Adapted from <see href="https://gist.github.com/Davidblkx/e12ab0bb2aff7fd8072632b396538560"/>
     /// </remarks>
-    public static int calculateLevenshtein(string source1, string source2, bool caseSensitive = false) //O(n*m)
+    private static int calculateLevenshtein(string source1, string source2, bool caseSensitive = false)
     {
       if (caseSensitive)
       {
@@ -621,16 +948,6 @@ namespace WebEdit {
 
       // Return result
       return matrix[source1Length, source2Length];
-    }
-
-    // P/Invoke helpers not present in Win32 wrapper
-    private static class NativeMethods
-    {
-      [DllImport("user32", SetLastError = true)]
-      public static extern bool DeleteMenu(IntPtr hMenu, uint uPosition, uint uFlags);
-
-      [DllImport("user32")]
-      public static extern bool DrawMenuBar(IntPtr hWnd);
     }
   }
 }

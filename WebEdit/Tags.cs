@@ -1,6 +1,6 @@
-﻿using System.Text;
+﻿using Npp.DotNet.Plugin;
+using System.Text;
 using System.Text.RegularExpressions;
-using Npp.DotNet.Plugin;
 
 namespace WebEdit
 {
@@ -17,7 +17,8 @@ namespace WebEdit
     /// \n with a new line string determined by current EOL mode
     /// \t with the tab character
     /// \| with |
-    /// \\ with \ (UNNECESSARY/DEPRECATED)
+    /// \\ with \
+    /// etc. (see code/readme for details)
     /// </code>
     /// </summary>
     /// <param name="value">Input string from the ini-file's value of the tag.</param>
@@ -30,31 +31,43 @@ namespace WebEdit
       ScintillaGateway sci = new(Utils.GetCurrentScintilla());
       sci.SetTargetRange(_tabStartPos, _tabEndPos);
       string indent = sci.GetTargetText();
-      value = Regex.Replace(value, "(?<!\\\\)\\\\r(?<!\\\\)\\\\n", $"\r\n{indent}"); // literal DOS EOL
-      value = Regex.Replace(value, "(?<!\\\\)\\\\r", $"\r{indent}"); // literal carriage return
-      value = Regex.Replace(value, "(?<!\\\\)\\\\n", $"\n{indent}"); // document-specific EOL
-      value = Regex.Replace(value, "(?<!\\\\)\\\\t", $"\t{indent}"); // tab character
-      value = Regex.Replace(value, "(?<!\\\\)\\|",   $"|{indent}");  // cursor
-      // value = Regex.Replace(value, "\\\\", "\\");                 // escape character (not needed)
+      value = Regex.Replace(value, @"((?<!\\)\\f\[|\\d:(?:""|'))([^\]]+)(\]|""|')", match => // File content or date format
+      {
+        string prefix = match.Groups[1].Value; // \f[, \d:" or \d:'
+        string path   = match.Groups[2].Value; // C:\path\to\test\file.txt, yyyy\MM\dd hh:mm:ss, etc.
+        string suffix = match.Groups[3].Value; // ], " or '
+
+        // Replace backslashes with double backslashes + return
+        string escapedPath = path.Replace(@"\", @"\\");
+        return prefix + escapedPath + suffix;
+      });
+
+      value = Regex.Replace(value, @"(?<!\\)\\r(?<!\\)\\n", $"\r\n{indent}"); // DOS EOL
+      value = Regex.Replace(value, @"(?<!\\)\\r",  $"\r{indent}"); // carriage return
+      value = Regex.Replace(value, @"(?<!\\)\\n",  $"\n{indent}"); // document-specific EOL
+      value = Regex.Replace(value, @"(?<!\\)\\t",  $"\t{indent}"); // tab character
+      value = Regex.Replace(value, @"(?<!\\)\\\|", $"|");          // cursor
+      value = Regex.Replace(value, @"\\", @"\");                   // escape character
 
       // Handle escaped sequences
       StringBuilder text = new(value);
-      text.Replace("\\\\r\\\\n", "\\r\\n"); // literal DOS EOL (escaped)
-      text.Replace("\\\\r", "\\r");  // literal carriage return (escaped)
-      text.Replace("\\\\n", "\\n");  // document-specific EOL (escaped)
-      text.Replace("\\\\t", "\\t");  // tab character (escaped)
-      text.Replace("\\|", "|");      // cursor (escaped)
-      // text.Replace("\\\\", "\\"); // escape character (not needed)
+      text.Replace(@"\\r\\n", @"\r\n"); // DOS EOL (escaped)
+      text.Replace(@"\\r",    @"\r");   // carriage return (escaped)
+      text.Replace(@"\\n",    @"\n");   // document-specific EOL (escaped)
+      text.Replace(@"\\t",    @"\t");   // tab character (escaped)
+      text.Replace(@"\\|",    "|");     // cursor (escaped)
+      text.Replace(@"\\",     @"\");    // escape character
       return text.ToString();
     }
 
     /// <summary>
     /// Find, select and paste into the following escape sequences (in the order shown):
     /// <code>
-    /// 1) \f[FileName:Section] with the contents of ':Section', if 'FileName' is a valid INI file;
+    /// 1) \f[FileName::Section] with the contents of '::Section', if 'FileName' is a valid INI file;
     ///    or the entire contents of 'FileName', if a section name is missing
     /// 2) \c with SCI_PASTE
     /// 3) \i with SCI_TAB
+    /// etc. (see code/readme for details)
     /// </code>
     /// </summary>
     /// <param name="startPos">The start position of the text range to search for escape sequences.</param>
@@ -132,7 +145,7 @@ namespace WebEdit
     }
 
     /// <summary>
-    /// Try to read from the file named in the tag <c>\\f[FileName:Section]</c>.
+    /// Try to read from the file named in the tag <c>\\f[FileName::Section]</c>.
     /// If a section name is given, treat the file as an ini-file and paste the
     /// contents of <c>:Section</c> into the document, otherwise paste the entire file.
     /// </summary>
@@ -150,14 +163,32 @@ namespace WebEdit
       long selectionEnd = tagStart;
       while (']' != sci.GetCharAt(selectionEnd) && selectionEnd++ < sci.GetLineEndPosition(tagStart)) ;
       sci.SetTargetRange(tagStart, selectionEnd);
-      string[] value = sci.GetTargetText()[1..].Split(':', StringSplitOptions.TrimEntries);
-      string fileName = value?.First();
-      string section = (value?.Length > 1) ? value?.Skip(1)?.First() : string.Empty;
 
-      if (string.IsNullOrEmpty(fileName))
-        fileName = $"{Main.PluginName}.ini";
+      // Try to find "::" in the target text (supports both "::" and ":" as section delimiters for backward compatibility and external files)
+      string filePath = string.Empty;
+      string section  = string.Empty;
+      foreach (string splitter in new string[] { "::", ":" })
+      {
+        string targetText = sci.GetTargetText()[1..];
+        string[] value = targetText.Split(splitter, StringSplitOptions.TrimEntries);
+        string fileName = value?.First();
+        section = (value?.Length > 1) ? value?.Skip(1)?.First() : string.Empty;
 
-      string filePath = Path.Combine(Main.iniDirectory, fileName);
+        if (string.IsNullOrEmpty(fileName))
+          fileName = $"{Main.PluginName}.ini";
+
+        filePath = Path.Combine(Main.iniDirectory, fileName);
+
+        // Extarnal file: try as absolute path if not found in the ini-directory
+        if (!File.Exists(filePath))
+          filePath = fileName;
+
+        if (File.Exists(filePath))
+          break;
+        else if (splitter == ":") // No real splitter found
+          filePath = targetText;
+      }
+
       if (!File.Exists(filePath) ||
           /* do not paste the contents of our own INI file */
           (string.IsNullOrEmpty(section) && string.Compare(filePath, Main.iniFilePath, StringComparison.InvariantCultureIgnoreCase) == 0))

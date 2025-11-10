@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyTitle("WebEdit plugin for Notepad++")]
 [assembly: AssemblyCompany("Amadeus IT Solutions")]
 [assembly: AssemblyProduct("WebEdit")]
-[assembly: AssemblyCopyright("© 2008 - 2010 by Alexander Iljin, © 2021 Miguel Febres, © 2025 Robert Di Pardo")]
+[assembly: AssemblyCopyright("© 2008 - 2010 by Alexander Iljin, © 2021 Miguel Febres, © 2025 Robert Di Pardo, © 2025 Richard Stockinger")]
 
 // Setting ComVisible to false makes the types in this assembly not visible
 // to COM components.  If you need to access a type in this assembly from
@@ -27,6 +27,6 @@ using System.Runtime.InteropServices;
 // You can specify all the values or you can default the Build and Revision Numbers
 // by using the '*' as shown below:
 // [assembly: AssemblyVersion("1.0.*")]
-[assembly: AssemblyVersion("2.8.3.0")]
-[assembly: AssemblyFileVersion("2.8.3.0")]
-[assembly: AssemblyInformationalVersion("2.8.3.0")]
+[assembly: AssemblyVersion("2.9.0.0")]
+[assembly: AssemblyFileVersion("2.9.0.0")]
+[assembly: AssemblyInformationalVersion("2.9.0.0")]

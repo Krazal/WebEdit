@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0-windows</TargetFramework>
-    <RuntimeIdentifiers>win-arm64;win-x64</RuntimeIdentifiers>
+    <RuntimeIdentifiers>win-arm64;win-x64;win-x86</RuntimeIdentifiers>
     <PublishAot>true</PublishAot>
     <PublishRelease>false</PublishRelease>
     <IsPackable>false</IsPackable>
