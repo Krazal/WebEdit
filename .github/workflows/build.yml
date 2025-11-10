@@ -49,7 +49,7 @@ jobs:
     needs: xds
     strategy:
       matrix:
-        target_runtime: [ x86, x64, arm64 ]
+        target_runtime: [ x64, arm64 ]
     runs-on: windows-latest
     env:
       DOTNET_NOLOGO: true
