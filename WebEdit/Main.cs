@@ -40,11 +40,11 @@ namespace WebEdit {
 
     public void OnBeNotified(ScNotification notification)
     {
+      uint code = notification.Header.Code;
 
       // Handle Notepad++ notifications
       if (notification.Header.HwndFrom == PluginData.NppData.NppHandle)
       {
-        uint code = notification.Header.Code;
         switch ((NppMsg)code)
         {
           case NppMsg.NPPN_READY:
@@ -71,12 +71,10 @@ namespace WebEdit {
         }
       }
 
-
       // Handle Scintilla notifications (auto-completion)
-      if (notification.Header.HwndFrom == Utils.GetCurrentScintilla())
+      // if (notification.Header.HwndFrom == Utils.GetCurrentScintilla()) 
+      else
       {
-        uint code = notification.Header.Code;
-        var scintillaGateway = new ScintillaGateway(Utils.GetCurrentScintilla());
         switch ((SciMsg)code)
         {
 
@@ -89,6 +87,7 @@ namespace WebEdit {
           case SciMsg.SCN_AUTOCSELECTION:
             if (pluginACOpened)
             {
+              var scintillaGateway = new ScintillaGateway(Utils.GetCurrentScintilla());
 
               // Get the autocompletion text in the correct encoding
               IntPtr textPointer;
